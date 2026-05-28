@@ -1,180 +1,2585 @@
--- ═══════════════════════════════════════════════════════════════════════════
--- NEXUS — Script Supabase COMPLET (tout en une fois)
--- Projet : https://supabase.com/dashboard → SQL Editor → New query → Run
--- ═══════════════════════════════════════════════════════════════════════════
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nexus — Chat</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+  :root {
+    --bg-deepest: #0d0f13;
+    --bg-deep: #13151b;
+    --bg-mid: #1a1d26;
+    --bg-surface: #20232e;
+    --bg-hover: #272b38;
+    --bg-active: #2e3344;
+    --accent: #5b73ff;
+    --accent-hover: #7088ff;
+    --accent-glow: rgba(91, 115, 255, 0.25);
+    --accent2: #ff5b8d;
+    --text-primary: #e8eaf0;
+    --text-secondary: #8b90a7;
+    --text-muted: #555b73;
+    --border: rgba(255,255,255,0.06);
+    --border-strong: rgba(255,255,255,0.12);
+    --success: #4ade80;
+    --danger: #f87171;
+    --online: #4ade80;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+  }
 
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+  * { margin:0; padding:0; box-sizing:border-box; }
 
--- ───────────────────────────────────────────────────────────────────────────
--- 1. TABLE users
--- ───────────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.users (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  username        TEXT NOT NULL,
-  username_lower  TEXT NOT NULL,
-  displayname     TEXT NOT NULL,
-  email           TEXT NOT NULL,
-  email_lower     TEXT NOT NULL,
-  password        TEXT NOT NULL,
-  email_verified  BOOLEAN NOT NULL DEFAULT false,
-  avatar_url      TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-deepest);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    font-size: 14px;
+  }
 
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS username_lower TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email_lower TEXT;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
-ALTER TABLE public.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+  /* ─── AUTH SCREENS ──────────────────────────────────── */
+  #auth-overlay {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-deepest);
+    z-index: 1000;
+    animation: fadeIn 0.4s ease;
+  }
 
-CREATE UNIQUE INDEX IF NOT EXISTS users_username_lower_idx ON public.users (username_lower);
-CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON public.users (email_lower);
+  .auth-bg {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 20%, rgba(91,115,255,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 80% 80%, rgba(255,91,141,0.08) 0%, transparent 60%);
+    pointer-events: none;
+  }
 
-COMMENT ON COLUMN public.users.avatar_url IS 'URL publique Storage (avatars/{id}/avatar.png) ou data URL PNG';
+  .auth-card {
+    position: relative;
+    background: var(--bg-deep);
+    border: 1px solid var(--border-strong);
+    border-radius: 20px;
+    padding: 40px 44px;
+    width: 420px;
+    max-width: 95vw;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(91,115,255,0.08);
+    animation: slideUp 0.5s cubic-bezier(0.16,1,0.3,1);
+  }
 
--- ───────────────────────────────────────────────────────────────────────────
--- 2. TABLE friendships
--- ───────────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.friendships (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  friend_id  UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  status     TEXT NOT NULL DEFAULT 'pending'
-             CHECK (status IN ('pending', 'accepted', 'blocked')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, friend_id),
-  CHECK (user_id <> friend_id)
-);
+  .auth-logo {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 32px;
+  }
 
-CREATE INDEX IF NOT EXISTS idx_friendships_user   ON public.friendships (user_id);
-CREATE INDEX IF NOT EXISTS idx_friendships_friend ON public.friendships (friend_id);
-CREATE INDEX IF NOT EXISTS idx_friendships_status ON public.friendships (status);
+  .auth-logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 4px 16px var(--accent-glow);
+  }
 
--- ───────────────────────────────────────────────────────────────────────────
--- 3. TABLE messages
--- ───────────────────────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS public.messages (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  sender_id   UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  receiver_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-  content     TEXT NOT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CHECK (sender_id <> receiver_id)
-);
+  .auth-logo-text {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--text-primary);
+    letter-spacing: -0.5px;
+  }
 
-CREATE INDEX IF NOT EXISTS idx_messages_pair ON public.messages (sender_id, receiver_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_messages_receiver ON public.messages (receiver_id, created_at);
+  .auth-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
 
--- ───────────────────────────────────────────────────────────────────────────
--- 4. RLS — users
--- ───────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+  .auth-subtitle {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 28px;
+  }
 
-DROP POLICY IF EXISTS "users_select_all" ON public.users;
-CREATE POLICY "users_select_all"
-  ON public.users FOR SELECT
-  TO anon, authenticated
-  USING (true);
+  .form-group {
+    margin-bottom: 16px;
+  }
 
-DROP POLICY IF EXISTS "users_insert_anon" ON public.users;
-CREATE POLICY "users_insert_anon"
-  ON public.users FOR INSERT
-  TO anon, authenticated
-  WITH CHECK (true);
+  .form-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
 
-DROP POLICY IF EXISTS "users_update_anon" ON public.users;
-CREATE POLICY "users_update_anon"
-  ON public.users FOR UPDATE
-  TO anon, authenticated
-  USING (true)
-  WITH CHECK (true);
+  .form-input {
+    width: 100%;
+    background: var(--bg-mid);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 11px 14px;
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
 
--- ───────────────────────────────────────────────────────────────────────────
--- 5. RLS — friendships
--- ───────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;
+  .form-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
 
-DROP POLICY IF EXISTS "friendships_select" ON public.friendships;
-CREATE POLICY "friendships_select"
-  ON public.friendships FOR SELECT
-  TO anon, authenticated
-  USING (true);
+  .form-input::placeholder { color: var(--text-muted); }
 
-DROP POLICY IF EXISTS "friendships_insert" ON public.friendships;
-CREATE POLICY "friendships_insert"
-  ON public.friendships FOR INSERT
-  TO anon, authenticated
-  WITH CHECK (true);
+  .form-input.error {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(248,113,113,0.15);
+  }
 
-DROP POLICY IF EXISTS "friendships_update" ON public.friendships;
-CREATE POLICY "friendships_update"
-  ON public.friendships FOR UPDATE
-  TO anon, authenticated
-  USING (true)
-  WITH CHECK (true);
+  .form-error {
+    font-size: 12px;
+    color: var(--danger);
+    margin-top: 5px;
+    display: none;
+  }
 
-DROP POLICY IF EXISTS "friendships_delete" ON public.friendships;
-CREATE POLICY "friendships_delete"
-  ON public.friendships FOR DELETE
-  TO anon, authenticated
-  USING (true);
+  .form-error.show { display: block; }
 
--- ───────────────────────────────────────────────────────────────────────────
--- 6. RLS — messages
--- ───────────────────────────────────────────────────────────────────────────
-ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+  .btn-primary {
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 12px 20px;
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s, box-shadow 0.2s;
+    margin-top: 8px;
+    box-shadow: 0 4px 20px var(--accent-glow);
+  }
 
-DROP POLICY IF EXISTS "messages_select" ON public.messages;
-CREATE POLICY "messages_select"
-  ON public.messages FOR SELECT
-  TO anon, authenticated
-  USING (true);
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    box-shadow: 0 6px 28px rgba(91,115,255,0.4);
+  }
 
-DROP POLICY IF EXISTS "messages_insert" ON public.messages;
-CREATE POLICY "messages_insert"
-  ON public.messages FOR INSERT
-  TO anon, authenticated
-  WITH CHECK (true);
+  .btn-primary:active { transform: scale(0.98); }
 
--- ───────────────────────────────────────────────────────────────────────────
--- 7. STORAGE — bucket avatars (public)
--- ───────────────────────────────────────────────────────────────────────────
-INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-VALUES (
-  'avatars',
-  'avatars',
-  true,
-  2097152,
-  ARRAY['image/png']::text[]
-)
-ON CONFLICT (id) DO UPDATE SET
-  public = EXCLUDED.public,
-  file_size_limit = EXCLUDED.file_size_limit,
-  allowed_mime_types = EXCLUDED.allowed_mime_types;
+  .auth-switch {
+    text-align: center;
+    margin-top: 22px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
 
--- ───────────────────────────────────────────────────────────────────────────
--- 8. STORAGE — politiques (mode démo avec clé anon, comme l'app Nexus)
--- ───────────────────────────────────────────────────────────────────────────
-DROP POLICY IF EXISTS "avatars_public_read" ON storage.objects;
-CREATE POLICY "avatars_public_read"
-  ON storage.objects FOR SELECT
-  TO public
-  USING (bucket_id = 'avatars');
+  .auth-link {
+    color: var(--accent);
+    cursor: pointer;
+    font-weight: 500;
+    transition: color 0.2s;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
 
-DROP POLICY IF EXISTS "avatars_anon_insert" ON storage.objects;
-CREATE POLICY "avatars_anon_insert"
-  ON storage.objects FOR INSERT
-  TO anon, authenticated
-  WITH CHECK (bucket_id = 'avatars');
+  .auth-link:hover { color: var(--accent-hover); }
 
-DROP POLICY IF EXISTS "avatars_anon_update" ON storage.objects;
-CREATE POLICY "avatars_anon_update"
-  ON storage.objects FOR UPDATE
-  TO anon, authenticated
-  USING (bucket_id = 'avatars');
+  .global-error {
+    background: rgba(248,113,113,0.1);
+    border: 1px solid rgba(248,113,113,0.3);
+    border-radius: var(--radius-xs);
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--danger);
+    margin-bottom: 16px;
+    display: none;
+  }
 
-DROP POLICY IF EXISTS "avatars_anon_delete" ON storage.objects;
-CREATE POLICY "avatars_anon_delete"
-  ON storage.objects FOR DELETE
-  TO anon, authenticated
-  USING (bucket_id = 'avatars');
+  .global-error.show { display: block; }
+
+  .global-success {
+    background: rgba(74,222,128,0.1);
+    border: 1px solid rgba(74,222,128,0.3);
+    border-radius: var(--radius-xs);
+    padding: 10px 14px;
+    font-size: 13px;
+    color: var(--success);
+    margin-bottom: 16px;
+    display: none;
+  }
+
+  .global-success.show { display: block; }
+
+  /* ─── MAIN APP ──────────────────────────────────────── */
+  #app {
+    display: none;
+    height: 100vh;
+    flex-direction: row;
+  }
+  #app.visible { display: flex; animation: fadeIn 0.4s ease; }
+
+  /* ─── SERVER RAIL ────────────────────────────────────── */
+  .server-rail {
+    width: 72px;
+    background: var(--bg-deepest);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 0;
+    gap: 6px;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .server-pill {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: border-radius 0.2s cubic-bezier(0.4,0,0.2,1), background 0.15s, color 0.15s;
+    color: var(--text-secondary);
+    position: relative;
+    flex-shrink: 0;
+  }
+  .server-pill:hover, .server-pill.active {
+    border-radius: 16px;
+    background: var(--accent);
+    color: #fff;
+  }
+  .server-pill.home {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    color: #fff;
+  }
+  .server-pill.home:hover, .server-pill.home.active { border-radius: 16px; }
+  .server-sep {
+    width: 32px; height: 2px;
+    background: var(--border-strong);
+    border-radius: 2px;
+    margin: 4px 0;
+    flex-shrink: 0;
+  }
+  .srv-tooltip {
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%; transform: translateY(-50%);
+    background: #111216;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px; font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s;
+    z-index: 999;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  .server-pill:hover .srv-tooltip { opacity: 1; }
+
+  /* ─── DM SIDEBAR ─────────────────────────────────────── */
+  .dm-sidebar {
+    width: 240px;
+    background: var(--bg-deep);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+  }
+  .dm-sidebar-top {
+    padding: 10px 10px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .dm-search {
+    width: 100%;
+    background: var(--bg-deepest);
+    border: none;
+    border-radius: 4px;
+    padding: 7px 10px;
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    outline: none;
+  }
+  .dm-search::placeholder { color: var(--text-muted); font-size: 13px; }
+
+  .dm-section-label {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 2px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+  }
+  .dm-add-btn {
+    background: none; border: none;
+    color: var(--text-muted); cursor: pointer;
+    width: 20px; height: 20px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .dm-add-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+  .dm-nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 10px;
+    margin: 2px 8px;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: background 0.1s, color 0.1s;
+    font-size: 14px; font-weight: 500;
+  }
+  .dm-nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .dm-nav-item.active { background: var(--bg-active); color: var(--text-primary); }
+  .dm-nav-icon {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+  }
+  .dm-nav-item.active .dm-nav-icon { background: rgba(91,115,255,0.2); color: var(--accent); }
+
+  .dm-list-label {
+    padding: 14px 16px 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+  }
+  .dm-list {
+    flex: 1; overflow-y: auto;
+    padding: 0 8px 8px;
+  }
+  .dm-empty {
+    padding: 20px 8px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  /* DM User bar (bottom) */
+  .dm-user-bar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg-mid);
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .dm-user-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    background-size: cover;
+    background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 700;
+    color: #fff; flex-shrink: 0;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+  }
+  .dm-user-avatar.has-img { color: transparent; }
+  .dm-status-dot {
+    position: absolute; bottom: -1px; right: -1px;
+    width: 11px; height: 11px;
+    background: var(--online);
+    border-radius: 50%;
+    border: 2px solid var(--bg-mid);
+  }
+  .dm-user-info { flex: 1; min-width: 0; }
+  .dm-user-name {
+    font-size: 13px; font-weight: 600; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dm-user-tag {
+    font-size: 11px; color: var(--text-muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dm-user-btns { display: flex; gap: 2px; }
+  .dm-icon-btn {
+    background: none; border: none;
+    color: var(--text-muted); cursor: pointer;
+    width: 28px; height: 28px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s, color 0.12s;
+  }
+  .dm-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  /* ─── MAIN AREA ──────────────────────────────────────── */
+  .main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-mid);
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  /* Topbar */
+  .main-topbar {
+    height: 48px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 16px;
+    gap: 8px;
+    background: var(--bg-mid);
+    flex-shrink: 0;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .topbar-icon { color: var(--text-muted); display: flex; align-items: center; }
+  .topbar-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px; font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .topbar-sep {
+    width: 1px; height: 24px;
+    background: var(--border-strong);
+    margin: 0 8px;
+    flex-shrink: 0;
+  }
+  .topbar-tabs { display: flex; align-items: center; gap: 2px; flex: 1; }
+  .topbar-tab {
+    background: none; border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 500;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+    white-space: nowrap;
+  }
+  .topbar-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .topbar-tab.active { background: var(--bg-active); color: var(--text-primary); }
+  .topbar-tab.add-friend-tab {
+    background: var(--accent);
+    color: #fff;
+    margin-left: 4px;
+    font-weight: 600;
+  }
+  .topbar-tab.add-friend-tab:hover { background: var(--accent-hover); }
+  .topbar-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+  .topbar-icon-btn {
+    background: none; border: none;
+    color: var(--text-muted); cursor: pointer;
+    width: 32px; height: 32px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s, color 0.12s;
+  }
+  .topbar-icon-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .topbar-divider {
+    width: 1px; height: 20px;
+    background: var(--border-strong);
+    margin: 0 4px;
+  }
+
+  /* Friends view */
+  .friends-view {
+    flex: 1; overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .friends-section-label {
+    padding: 20px 20px 8px;
+    font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .friends-list { flex: 1; padding: 0 8px 16px; }
+  .friends-empty {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 80px 40px;
+    gap: 16px;
+    text-align: center;
+  }
+  .friends-empty-img { opacity: 0.5; margin-bottom: 8px; }
+  .friends-empty-text {
+    font-family: 'Syne', sans-serif;
+    font-size: 17px; font-weight: 700;
+    color: var(--text-secondary);
+  }
+  .friends-empty-sub {
+    font-size: 13px; color: var(--text-muted);
+    max-width: 300px; line-height: 1.6;
+  }
+
+  /* ─── ACTIVITY PANEL ─────────────────────────────────── */
+  .activity-panel {
+    width: 360px;
+    background: var(--bg-deep);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    flex-shrink: 0;
+  }
+  .activity-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Syne', sans-serif;
+    font-size: 14px; font-weight: 700;
+    color: var(--text-primary);
+  }
+  .activity-body {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .activity-empty {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 10px;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 20px;
+  }
+  .activity-empty p { font-size: 14px; font-weight: 500; color: var(--text-secondary); }
+  .activity-empty span { font-size: 12px; }
+
+  /* ─── MISC ───────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 4px; }
+
+  .notif-badge {
+    position: absolute; bottom: -2px; right: -2px;
+    background: var(--danger); color: #fff;
+    font-size: 9px; font-weight: 700;
+    padding: 1px 4px; border-radius: 8px;
+    border: 2px solid var(--bg-deepest);
+  }
+
+  /* Legacy kept for modal compat */
+  .btn-secondary {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: 10px 20px;
+    color: var(--text-primary);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s;
+  }
+  .btn-secondary:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
+
+  /* ─── ANIMATIONS ─────────────────────────────────────── */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  /* Modal overlay for logout confirm */
+  .modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2000;
+    display: none;
+    animation: fadeIn 0.2s ease;
+  }
+
+  .modal.open { display: flex; }
+
+  .modal-card {
+    background: var(--bg-deep);
+    border: 1px solid var(--border-strong);
+    border-radius: 16px;
+    padding: 28px 32px;
+    width: 360px;
+    animation: slideUp 0.3s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  .modal-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+
+  .modal-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    line-height: 1.5;
+  }
+
+  .modal-actions {
+    display: flex; gap: 10px; justify-content: flex-end;
+  }
+
+  .btn-ghost {
+    background: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xs);
+    padding: 8px 18px;
+    color: var(--text-secondary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+  .btn-danger {
+    background: var(--danger);
+    border: none;
+    border-radius: var(--radius-xs);
+    padding: 8px 18px;
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .btn-danger:hover { background: #ef4444; }
+
+  /* ─── OTP INPUT ─────────────────────────────────────── */
+  .otp-container {
+    display: flex; gap: 8px; justify-content: center;
+    margin: 10px 0 4px;
+  }
+
+  .otp-input {
+    width: 48px; height: 56px;
+    background: var(--bg-mid);
+    border: 2px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    text-align: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 22px; font-weight: 700;
+    color: var(--text-primary);
+    outline: none;
+    caret-color: transparent;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  }
+
+  .otp-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+    background: var(--bg-surface);
+  }
+
+  .otp-input.filled {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(91,115,255,0.06);
+  }
+
+  .otp-input.otp-error { border-color: var(--danger); color: var(--danger); }
+
+  /* ─── VERIFY INFO BOX ────────────────────────────────── */
+  .verify-info-box {
+    background: rgba(91,115,255,0.07);
+    border: 1px solid rgba(91,115,255,0.18);
+    border-radius: var(--radius-xs);
+    padding: 11px 14px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 18px;
+    line-height: 1.5;
+  }
+  .verify-info-box strong { color: var(--text-primary); }
+
+  /* ─── DEMO CODE BOX ─────────────────────────────────── */
+  .demo-code-box {
+    background: rgba(255, 196, 0, 0.07);
+    border: 1px solid rgba(255, 196, 0, 0.25);
+    border-radius: var(--radius-xs);
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #ffc400;
+    margin-bottom: 14px;
+    text-align: center;
+    display: none;
+    line-height: 1.5;
+  }
+  .demo-code-box.show { display: block; }
+  .demo-code-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px; font-weight: 800;
+    letter-spacing: 6px;
+    display: block;
+    margin-top: 4px;
+    color: #ffce00;
+  }
+
+  /* ─── TIMER ─────────────────────────────────────────── */
+  .code-timer {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    transition: color 0.3s;
+  }
+  .code-timer.expiring { color: var(--danger); }
+
+  /* ─── RESEND ROW ─────────────────────────────────────── */
+  .resend-row {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  /* ─── BUTTON STATES ─────────────────────────────────── */
+  .btn-primary:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none !important;
+  }
+
+  /* ─── FORGOT PASSWORD LINK ──────────────────────────── */
+  .forgot-row {
+    text-align: right;
+    margin-top: 4px;
+    margin-bottom: 6px;
+  }
+  .forgot-link {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .forgot-link:hover { color: var(--accent); }
+
+  /* ─── ADD FRIEND MODAL ──────────────────────────────── */
+  /* Add friend modal */
+  .add-friend-section {
+    padding: 0 16px 12px;
+  }
+
+  .add-friend-btn {
+    width: 100%;
+    background: var(--bg-surface);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-xs);
+    padding: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  .add-friend-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  /* ─── FRIEND / PENDING CARDS ───────────────────────── */
+  .friend-card {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    transition: background 0.12s;
+    cursor: default;
+  }
+  .friend-card:hover { background: var(--bg-hover); }
+  .friend-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    background-size: cover;
+    background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700;
+    color: #fff; flex-shrink: 0;
+    overflow: hidden;
+  }
+  .friend-avatar.has-img { color: transparent; }
+  .friend-info { flex: 1; min-width: 0; }
+  .friend-name {
+    font-size: 14px; font-weight: 600; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .friend-tag { font-size: 12px; color: var(--text-muted); }
+  .friend-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .friend-btn {
+    border: none; border-radius: 50%;
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: background 0.15s, transform 0.1s;
+    flex-shrink: 0;
+  }
+  .friend-btn:active { transform: scale(0.92); }
+  .friend-btn.accept { background: rgba(74,222,128,0.15); color: var(--success); }
+  .friend-btn.accept:hover { background: rgba(74,222,128,0.3); }
+  .friend-btn.decline { background: rgba(248,113,113,0.12); color: var(--danger); }
+  .friend-btn.decline:hover { background: rgba(248,113,113,0.25); }
+  .friend-btn.msg { background: var(--bg-surface); color: var(--text-secondary); }
+  .friend-btn.msg:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .pending-direction {
+    font-size: 11px; color: var(--text-muted);
+    background: var(--bg-surface); border-radius: 4px;
+    padding: 2px 7px; margin-left: 4px;
+  }
+
+  /* ─── DM LIST ITEMS ─────────────────────────────────── */
+  .dm-user-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 8px;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: background 0.1s, color 0.1s;
+    position: relative;
+  }
+  .dm-user-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .dm-user-item.active { background: var(--bg-active); color: var(--text-primary); }
+  .dm-user-item-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    background-size: cover;
+    background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-size: 13px; font-weight: 700;
+    color: #fff; flex-shrink: 0;
+    overflow: hidden;
+  }
+  .dm-user-item-avatar.has-img { color: transparent; }
+  .dm-user-item-name {
+    font-size: 13px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1;
+  }
+  .dm-unread-badge {
+    background: var(--danger); color: #fff;
+    font-size: 10px; font-weight: 700;
+    padding: 1px 5px; border-radius: 8px;
+    min-width: 16px; text-align: center;
+  }
+
+  /* ─── DM CHAT VIEW ──────────────────────────────────── */
+  .dm-chat-view-wrap {
+    display: flex; flex-direction: column; flex: 1; overflow: hidden;
+  }
+  .dm-chat-messages {
+    flex: 1; overflow-y: auto;
+    padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .dm-chat-input-row {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 10px; align-items: center;
+    background: var(--bg-mid);
+  }
+  .dm-chat-input {
+    flex: 1;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .dm-chat-input:focus { border-color: var(--accent); }
+  .dm-chat-input::placeholder { color: var(--text-muted); }
+  .dm-chat-send-btn {
+    background: var(--accent);
+    border: none; border-radius: 8px;
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+    flex-shrink: 0;
+  }
+  .dm-chat-send-btn:hover { background: var(--accent-hover); }
+  .dm-chat-send-btn:active { transform: scale(0.92); }
+
+  /* ─── MESSAGES ──────────────────────────────────────── */
+  .msg-group {
+    display: flex; flex-direction: column; gap: 2px;
+    margin-bottom: 8px;
+  }
+  .msg-header {
+    display: flex; align-items: baseline; gap: 8px;
+    margin-bottom: 2px;
+  }
+  .msg-author { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .msg-time { font-size: 11px; color: var(--text-muted); }
+  .msg-bubble {
+    background: var(--bg-surface);
+    border-radius: 0 8px 8px 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: var(--text-primary);
+    max-width: 480px;
+    line-height: 1.5;
+    word-break: break-word;
+    align-self: flex-start;
+  }
+  .msg-bubble.own {
+    background: rgba(91,115,255,0.18);
+    border-radius: 8px 0 8px 8px;
+    align-self: flex-end;
+  }
+  .msg-row { display: flex; flex-direction: column; }
+  .msg-row.own { align-items: flex-end; }
+
+  /* ─── DM CHAT HEADER ────────────────────────────────── */
+  .dm-chat-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 16px;
+  }
+  .dm-chat-header-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    background-size: cover;
+    background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif; font-size: 12px; font-weight: 700;
+    color: #fff;
+    overflow: hidden;
+  }
+  .dm-chat-header-avatar.has-img { color: transparent; }
+
+  /* ─── SETTINGS / PROFIL ─────────────────────────────── */
+  .settings-modal-card {
+    width: 480px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .settings-section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin: 20px 0 12px;
+  }
+  .settings-section-title:first-of-type { margin-top: 0; }
+  .settings-avatar-row {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 16px;
+    background: var(--bg-mid);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+  .settings-avatar-preview {
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    background-size: cover;
+    background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 32px; font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .settings-avatar-preview.has-img { color: transparent; }
+  .settings-avatar-actions { display: flex; flex-direction: column; gap: 8px; }
+  .settings-avatar-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    max-width: 260px;
+  }
+  .btn-upload {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-xs);
+    padding: 8px 16px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    width: fit-content;
+  }
+  .btn-upload:hover { background: var(--accent-hover); }
+  .btn-upload input[type="file"] { display: none; }
+  .btn-remove-avatar {
+    background: none;
+    border: none;
+    color: var(--danger);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+    width: fit-content;
+  }
+  .btn-remove-avatar:hover { text-decoration: underline; }
+  .settings-field-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    line-height: 1.4;
+  }
+  .settings-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ─── TOAST NOTIFICATION ─────────────────────────────── */
+  #nexus-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-size: 14px; color: var(--text-primary);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    z-index: 9999;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+    white-space: nowrap;
+  }
+  #nexus-toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ─── AUTH OVERLAY ─────────────────────────────────── -->
+<div id="auth-overlay">
+  <div class="auth-bg"></div>
+
+  <!-- LOGIN -->
+  <div class="auth-card" id="login-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">⚡</div>
+      <span class="auth-logo-text">Nexus</span>
+    </div>
+    <h1 class="auth-title">Bon retour !</h1>
+    <p class="auth-subtitle">Content de te revoir. Connecte-toi à ton compte.</p>
+
+    <div class="global-error" id="login-error"></div>
+    <div class="global-success" id="login-success"></div>
+
+    <div class="form-group">
+      <label class="form-label">Email ou nom d'utilisateur</label>
+      <input type="text" class="form-input" id="login-identifier" placeholder="exemple@mail.com ou @pseudo">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mot de passe</label>
+      <input type="password" class="form-input" id="login-password" placeholder="••••••••">
+      <div class="forgot-row">
+        <span class="forgot-link" onclick="showForgotEmail()">Mot de passe oublié ?</span>
+      </div>
+    </div>
+    <button class="btn-primary" onclick="handleLogin()">Se connecter</button>
+
+    <div class="auth-switch">
+      Pas encore de compte ? <span class="auth-link" onclick="showRegister()">Créer un compte</span>
+    </div>
+  </div>
+
+  <!-- REGISTER -->
+  <div class="auth-card" id="register-card" style="display:none">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">⚡</div>
+      <span class="auth-logo-text">Nexus</span>
+    </div>
+    <h1 class="auth-title">Créer un compte</h1>
+    <p class="auth-subtitle">Rejoins Nexus et connecte-toi avec tes amis.</p>
+
+    <div class="global-error" id="register-error"></div>
+    <div class="global-success" id="register-success"></div>
+
+    <div class="form-group">
+      <label class="form-label">Nom d'utilisateur</label>
+      <input type="text" class="form-input" id="reg-username" placeholder="pseudo_cool (sans espaces)">
+      <div class="form-error" id="err-username"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nom d'affichage</label>
+      <input type="text" class="form-input" id="reg-displayname" placeholder="Ton Prénom ou surnom">
+      <div class="form-error" id="err-displayname"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input type="email" class="form-input" id="reg-email" placeholder="ton@email.com">
+      <div class="form-error" id="err-email"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Mot de passe</label>
+      <input type="password" class="form-input" id="reg-password" placeholder="Au moins 6 caractères">
+      <div class="form-error" id="err-password"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Confirmer le mot de passe</label>
+      <input type="password" class="form-input" id="reg-confirm" placeholder="Répète ton mot de passe">
+      <div class="form-error" id="err-confirm"></div>
+    </div>
+    <button class="btn-primary" id="register-btn" onclick="handleRegister()">Créer le compte</button>
+
+    <div class="auth-switch">
+      Déjà un compte ? <span class="auth-link" onclick="showLogin()">Se connecter</span>
+    </div>
+  </div>
+
+  <!-- VERIFY EMAIL -->
+  <div class="auth-card" id="verify-email-card" style="display:none">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">⚡</div>
+      <span class="auth-logo-text">Nexus</span>
+    </div>
+    <h1 class="auth-title">Vérifie ton email</h1>
+    <p class="auth-subtitle">Un code à 6 chiffres a été envoyé à ton adresse.</p>
+
+    <div class="verify-info-box">
+      📧 Code envoyé à <strong id="verify-email-display">–</strong>
+    </div>
+
+    <div class="demo-code-box" id="verify-demo-box">
+      ⚠️ Mode démo (EmailJS non configuré) — ton code :
+      <span class="demo-code-value" id="verify-demo-code">–</span>
+    </div>
+
+    <div class="global-error" id="verify-error"></div>
+
+    <div class="otp-container" id="verify-otp-container">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="one-time-code">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+    </div>
+
+    <div class="code-timer" id="verify-timer">Code valide pendant 10:00</div>
+
+    <button class="btn-primary" id="verify-btn" onclick="handleVerifyEmail()" style="margin-top:18px">
+      Vérifier le code
+    </button>
+
+    <div class="resend-row">
+      Pas reçu ?
+      <span class="auth-link" id="verify-resend-link" onclick="handleResendVerify()">Renvoyer le code</span>
+      <span id="verify-resend-timer" style="display:none;color:var(--text-muted)"></span>
+    </div>
+
+    <div class="auth-switch">
+      <span class="auth-link" onclick="showRegister()">← Retour à l'inscription</span>
+    </div>
+  </div>
+
+  <!-- FORGOT: ENTER EMAIL -->
+  <div class="auth-card" id="forgot-email-card" style="display:none">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">⚡</div>
+      <span class="auth-logo-text">Nexus</span>
+    </div>
+    <h1 class="auth-title">Mot de passe oublié</h1>
+    <p class="auth-subtitle">Saisis ton email pour recevoir un code de réinitialisation.</p>
+
+    <div class="global-error" id="forgot-email-error"></div>
+
+    <div class="form-group">
+      <label class="form-label">Adresse email</label>
+      <input type="email" class="form-input" id="forgot-email-input" placeholder="ton@email.com">
+    </div>
+
+    <button class="btn-primary" id="forgot-send-btn" onclick="handleForgotSend()">Envoyer le code</button>
+
+    <div class="auth-switch">
+      <span class="auth-link" onclick="showLogin()">← Retour à la connexion</span>
+    </div>
+  </div>
+
+  <!-- FORGOT: VERIFY CODE -->
+  <div class="auth-card" id="forgot-verify-card" style="display:none">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">⚡</div>
+      <span class="auth-logo-text">Nexus</span>
+    </div>
+    <h1 class="auth-title">Saisir le code</h1>
+    <p class="auth-subtitle">Entre le code à 6 chiffres reçu par email.</p>
+
+    <div class="verify-info-box">
+      📧 Code envoyé à <strong id="forgot-email-display">–</strong>
+    </div>
+
+    <div class="demo-code-box" id="forgot-demo-box">
+      ⚠️ Mode démo (EmailJS non configuré) — ton code :
+      <span class="demo-code-value" id="forgot-demo-code">–</span>
+    </div>
+
+    <div class="global-error" id="forgot-verify-error"></div>
+
+    <div class="otp-container" id="forgot-otp-container">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric" autocomplete="one-time-code">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+      <input type="text" class="otp-input" maxlength="1" inputmode="numeric">
+    </div>
+
+    <div class="code-timer" id="forgot-timer">Code valide pendant 10:00</div>
+
+    <button class="btn-primary" id="forgot-verify-btn" onclick="handleForgotVerify()" style="margin-top:18px">
+      Vérifier le code
+    </button>
+
+    <div class="resend-row">
+      Pas reçu ?
+      <span class="auth-link" id="forgot-resend-link" onclick="handleForgotResend()">Renvoyer le code</span>
+      <span id="forgot-resend-timer" style="display:none;color:var(--text-muted)"></span>
+    </div>
+
+    <div class="auth-switch">
+      <span class="auth-link" onclick="showForgotEmail()">← Retour</span>
+    </div>
+  </div>
+
+  <!-- FORGOT: NEW PASSWORD -->
+  <div class="auth-card" id="forgot-reset-card" style="display:none">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">⚡</div>
+      <span class="auth-logo-text">Nexus</span>
+    </div>
+    <h1 class="auth-title">Nouveau mot de passe</h1>
+    <p class="auth-subtitle">Choisis un nouveau mot de passe sécurisé.</p>
+
+    <div class="global-error" id="forgot-reset-error"></div>
+    <div class="global-success" id="forgot-reset-success"></div>
+
+    <div class="form-group">
+      <label class="form-label">Nouveau mot de passe</label>
+      <input type="password" class="form-input" id="forgot-newpw" placeholder="Au moins 6 caractères">
+      <div class="form-error" id="err-newpw"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Confirmer le mot de passe</label>
+      <input type="password" class="form-input" id="forgot-confirmpw" placeholder="Répète ton nouveau mot de passe">
+      <div class="form-error" id="err-confirmpw"></div>
+    </div>
+
+    <button class="btn-primary" onclick="handleResetPassword()">Modifier le mot de passe</button>
+
+    <div class="auth-switch">
+      <span class="auth-link" onclick="showLogin()">← Retour à la connexion</span>
+    </div>
+  </div>
+
+</div><!-- ─── FIN AUTH OVERLAY ─── -->
+
+<!-- ─── MAIN APP ─────────────────────────────────────── -->
+<div id="app">
+
+  <!-- ══ BARRE SERVEURS (gauche extrême) ══ -->
+  <div class="server-rail">
+    <div class="server-pill home active" title="Accueil" onclick="setActiveServer(this)">
+      <svg width="28" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      <span class="srv-tooltip">Accueil</span>
+    </div>
+    <div class="server-sep"></div>
+    <div class="server-pill" style="font-size:22px;font-weight:300;color:var(--online)" onclick="showModal('no-server-modal')">
+      +
+      <span class="srv-tooltip">Ajouter un serveur</span>
+    </div>
+  </div>
+
+  <!-- ══ SIDEBAR AMIS / DMs ══ -->
+  <div class="dm-sidebar">
+    <div class="dm-sidebar-top">
+      <div class="dm-search-wrap">
+        <input class="dm-search" type="text" placeholder="Trouver ou démarrer une conv…">
+      </div>
+    </div>
+
+    <div class="dm-section-label">
+      <span>Messages directs</span>
+      <button class="dm-add-btn" onclick="showModal('add-friend-modal')" title="Nouvelle conversation">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      </button>
+    </div>
+
+    <div class="dm-nav-item active" onclick="showFriendsView()">
+      <div class="dm-nav-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+      </div>
+      <span class="dm-nav-label">Amis</span>
+    </div>
+
+    <div class="dm-list-label">Messages privés</div>
+
+    <div class="dm-list" id="dm-list">
+      <div class="dm-empty">
+        <p>Aucune conversation.<br>Ajoute un ami pour commencer !</p>
+      </div>
+    </div>
+
+    <!-- Zone utilisateur -->
+    <div class="dm-user-bar">
+      <div class="dm-user-avatar" id="app-avatar">
+        A
+        <div class="dm-status-dot"></div>
+      </div>
+      <div class="dm-user-info">
+        <div class="dm-user-name" id="app-display-name">Utilisateur</div>
+        <div class="dm-user-tag" id="app-username">@pseudo</div>
+      </div>
+      <div class="dm-user-btns">
+        <button class="dm-icon-btn" title="Couper le micro">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+        </button>
+        <button class="dm-icon-btn" title="Casque">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3C6.48 3 2 7.48 2 13v5a2 2 0 002 2h2v-6H4v-1c0-4.42 3.58-8 8-8s8 3.58 8 8v1h-2v6h2a2 2 0 002-2v-5c0-5.52-4.48-10-10-10z"/></svg>
+        </button>
+        <button class="dm-icon-btn" title="Paramètres" onclick="openSettings()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+        </button>
+        <button class="dm-icon-btn" title="Se déconnecter" onclick="showModal('logout-modal')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CONTENU PRINCIPAL ══ -->
+  <div class="main-area">
+
+    <!-- Header -->
+    <div class="main-topbar" id="main-topbar">
+      <div class="topbar-left">
+        <div class="topbar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        </div>
+        <span class="topbar-title">Amis</span>
+      </div>
+      <div class="topbar-sep"></div>
+      <div class="topbar-tabs">
+        <button class="topbar-tab active" onclick="switchTopTab(this,'online')">En ligne</button>
+        <button class="topbar-tab" onclick="switchTopTab(this,'all')">Tous</button>
+        <button class="topbar-tab" onclick="switchTopTab(this,'pending')">En attente</button>
+        <button class="topbar-tab" onclick="switchTopTab(this,'blocked')">Bloqués</button>
+        <button class="topbar-tab add-friend-tab" onclick="showModal('add-friend-modal')">Ajouter un ami</button>
+      </div>
+      <div class="topbar-actions">
+        <button class="topbar-icon-btn" title="Nouvelle conversation DM">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        </button>
+        <div class="topbar-divider"></div>
+        <button class="topbar-icon-btn" title="Boîte de réception">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+        </button>
+        <button class="topbar-icon-btn" title="Aide">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Vue Amis (tab En ligne) -->
+    <div class="friends-view" id="friends-view">
+      <div class="friends-section-label" id="friends-count-label">EN LIGNE — 0</div>
+      <div class="friends-list" id="friends-list">
+        <div class="friends-empty">
+          <div class="friends-empty-img">
+            <svg width="120" height="80" viewBox="0 0 200 140" fill="none">
+              <ellipse cx="100" cy="70" rx="90" ry="50" fill="rgba(91,115,255,0.05)"/>
+              <circle cx="72" cy="62" r="28" fill="var(--bg-surface)"/>
+              <circle cx="128" cy="62" r="28" fill="var(--bg-surface)"/>
+              <circle cx="72" cy="60" r="18" fill="var(--bg-hover)"/>
+              <circle cx="128" cy="60" r="18" fill="var(--bg-hover)"/>
+              <circle cx="66" cy="56" r="6" fill="var(--text-muted)" opacity="0.4"/>
+              <circle cx="122" cy="56" r="6" fill="var(--text-muted)" opacity="0.4"/>
+              <path d="M60 75 Q72 82 84 75" stroke="var(--text-muted)" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.4"/>
+              <path d="M116 75 Q128 82 140 75" stroke="var(--text-muted)" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.4"/>
+            </svg>
+          </div>
+          <div class="friends-empty-text">Personne n'est en ligne pour l'instant.</div>
+          <div class="friends-empty-sub">Mais t'inquiète, tes amis se connecteront bientôt !</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Placeholder autres tabs -->
+    <div class="friends-view" id="all-view" style="display:none">
+      <div class="friends-section-label">TOUS LES AMIS — 0</div>
+      <div class="friends-list">
+        <div class="friends-empty">
+          <div class="friends-empty-text">Tu n'as encore aucun ami.</div>
+          <div class="friends-empty-sub">Utilise "Ajouter un ami" pour en trouver !</div>
+        </div>
+      </div>
+    </div>
+    <div class="friends-view" id="pending-view" style="display:none">
+      <div class="friends-section-label" id="pending-count-label">EN ATTENTE — 0</div>
+      <div class="friends-list" id="pending-list">
+        <div class="friends-empty"><div class="friends-empty-text">Aucune demande en attente.</div></div>
+      </div>
+    </div>
+
+    <!-- DM Chat view (hidden by default) -->
+    <div id="dm-chat-view" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+      <div class="dm-chat-messages" id="dm-chat-messages"></div>
+      <div class="dm-chat-input-row">
+        <input type="text" class="dm-chat-input" id="dm-chat-input" placeholder="Envoie un message…">
+        <button class="dm-chat-send-btn" onclick="handleSendMessage()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="friends-view" id="blocked-view" style="display:none">
+      <div class="friends-section-label">BLOQUÉS — 0</div>
+      <div class="friends-list">
+        <div class="friends-empty"><div class="friends-empty-text">Tu n'as bloqué personne.</div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══ PANNEAU DROIT — ACTIVITÉ ══ -->
+  <div class="activity-panel">
+    <div class="activity-header">Activité en cours</div>
+    <div class="activity-body">
+      <div class="activity-empty">
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" opacity="0.12">
+          <path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5S14.67 12 15.5 12s1.5.67 1.5 1.5S16.33 15 15.5 15zm3-3c-.83 0-1.5-.67-1.5-1.5S17.67 10 18.5 10s1.5.67 1.5 1.5S19.33 12 18.5 12z" fill="currentColor"/>
+        </svg>
+        <p>Aucune activité à afficher.</p>
+        <span>Tes amis joueront ici.</span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- ─── FIN APP ─── -->
+
+<!-- ─── MODALS ────────────────────────────────────────── -->
+
+<!-- Logout confirm -->
+<div class="modal" id="logout-modal">
+  <div class="modal-card">
+    <div class="modal-title">Se déconnecter ?</div>
+    <div class="modal-desc">Tu vas quitter ton compte <strong id="logout-name"></strong>. Tu pourras te reconnecter à tout moment.</div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal('logout-modal')">Annuler</button>
+      <button class="btn-danger" onclick="handleLogout()">Se déconnecter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add friend -->
+<div class="modal" id="add-friend-modal">
+  <div class="modal-card" style="width:460px">
+    <div class="modal-title">👋 Ajouter un ami</div>
+    <div class="modal-desc">Tu peux ajouter un ami avec son nom d'utilisateur exact.</div>
+    <div class="global-error" id="add-friend-error" style="margin-bottom:12px"></div>
+    <div class="global-success" id="add-friend-success" style="margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input type="text" class="form-input" id="add-friend-input" placeholder="Nom d'utilisateur exact…" style="flex:1">
+      <button class="btn-primary" style="width:auto;padding:11px 20px;margin-top:0" onclick="handleSendFriendRequest()">Envoyer</button>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-ghost" onclick="closeModal('add-friend-modal');document.getElementById('add-friend-input').value='';hideEl('add-friend-error');hideEl('add-friend-success')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- No server -->
+<div class="modal" id="no-server-modal">
+  <div class="modal-card">
+    <div class="modal-title">Créer un serveur</div>
+    <div class="modal-desc">La création de serveurs sera bientôt disponible. Reste connecté, de nouvelles fonctionnalités arrivent !</div>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal('no-server-modal')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="modal" id="settings-modal">
+  <div class="modal-card settings-modal-card">
+    <div class="modal-title">Mon compte</div>
+    <div class="modal-desc" style="margin-bottom:8px">Modifie ton profil comme sur Discord — photo, nom d'affichage et nom d'utilisateur.</div>
+
+    <div class="global-error" id="settings-error"></div>
+    <div class="global-success" id="settings-success"></div>
+
+    <div class="settings-section-title">Photo de profil</div>
+    <div class="settings-avatar-row">
+      <div class="settings-avatar-preview" id="settings-avatar-preview">?</div>
+      <div class="settings-avatar-actions">
+        <label class="btn-upload">
+          Changer la photo
+          <input type="file" id="settings-avatar-input" accept="image/png" onchange="handleAvatarFileSelect(event)">
+        </label>
+        <button type="button" class="btn-remove-avatar" id="settings-remove-avatar" onclick="removeAvatarPreview()" style="display:none">Supprimer la photo</button>
+        <p class="settings-avatar-hint">Fichier PNG uniquement, max. 2 Mo. Carré recommandé (256×256).</p>
+      </div>
+    </div>
+
+    <div class="settings-section-title">Profil</div>
+    <div class="form-group">
+      <label class="form-label">Nom d'affichage</label>
+      <input type="text" class="form-input" id="settings-displayname" placeholder="Comment les autres te voient" maxlength="40">
+      <p class="settings-field-hint">C'est le nom visible dans les conversations et la liste d'amis.</p>
+    </div>
+    <div class="form-group" style="margin-bottom:0">
+      <label class="form-label">Nom d'utilisateur</label>
+      <input type="text" class="form-input" id="settings-username" placeholder="pseudo_unique" maxlength="30">
+      <p class="settings-field-hint">Identifiant unique — lettres, chiffres, _ . - (3 à 30 caractères). Affiché comme @pseudo.</p>
+      <div class="form-error" id="settings-err-username"></div>
+      <div class="form-error" id="settings-err-displayname"></div>
+    </div>
+
+    <div class="settings-actions">
+      <button class="btn-ghost" onclick="closeModal('settings-modal')">Annuler</button>
+      <button class="btn-primary" id="settings-save-btn" style="width:auto;margin-top:0;padding:10px 24px" onclick="handleSaveProfile()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="nexus-toast"></div>
+
+<script>
+  const SUPABASE_URL      = 'https://ifmnbgfqypuawqgedjgw.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlmbW5iZ2ZxeXB1YXdxZ2Vkamd3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5OTQ4ODUsImV4cCI6MjA5NTU3MDg4NX0.F7Un_jEauULW6wPusURqrOrUKsvRh_Ss7VpiH6ehwrY';
+  const db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ─── EMAILJS CONFIG ───────────────────────────────────
+  const EMAILJS_PUBLIC_KEY  = 'ZoGhfO8ZjHcpBzpj8';
+  const EMAILJS_SERVICE_ID  = 'service_rbkn64b';
+  const EMAILJS_VERIFY_TMPL = 'template_ehvlaqm';
+  const EMAILJS_RESET_TMPL  = 'template_wivfhq2';
+  const EMAILJS_CONFIGURED  = true;
+  emailjs.init(EMAILJS_PUBLIC_KEY);
+
+  // ─── SESSION ─────────────────────────────────────────
+  function getCurrentUser() {
+    try { return JSON.parse(sessionStorage.getItem('nexus_current') || 'null'); } catch { return null; }
+  }
+  function setCurrentUser(user) { sessionStorage.setItem('nexus_current', JSON.stringify(user)); }
+
+  // ─── AVATAR (Supabase Storage + colonne avatar_url) ───
+  const AVATAR_BUCKET = 'avatars';
+  let _pendingAvatarDataUrl = null;
+  let _pendingAvatarFile = null;
+  let _pendingAvatarRemove = false;
+
+  function getAvatarUrl(userOrId) {
+    if (!userOrId) return null;
+    if (typeof userOrId === 'object') {
+      if (userOrId.avatar_url) return userOrId.avatar_url;
+      userOrId = userOrId.id;
+    }
+    if (!userOrId) return null;
+    const cur = getCurrentUser();
+    if (cur && cur.id === userOrId && cur.avatar_url) return cur.avatar_url;
+    const lists = [
+      ...(_friendsData?.friends || []),
+      ...(_friendsData?.pendingIn || []),
+      ...(_friendsData?.pendingOut || [])
+    ];
+    const found = lists.find(x => x.id === userOrId);
+    if (found && found.avatar_url) return found.avatar_url;
+    try { return localStorage.getItem('nexus_avatar_' + userOrId) || null; } catch { return null; }
+  }
+
+  function avatarStoragePath(userId) { return userId + '/avatar.png'; }
+
+  async function uploadAvatarToStorage(userId, file) {
+    const path = avatarStoragePath(userId);
+    const { error } = await db.storage.from(AVATAR_BUCKET).upload(path, file, {
+      upsert: true,
+      contentType: 'image/png',
+      cacheControl: '3600'
+    });
+    if (error) throw error;
+    const { data } = db.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+    return data.publicUrl + '?t=' + Date.now();
+  }
+
+  async function removeAvatarFromStorage(userId) {
+    await db.storage.from(AVATAR_BUCKET).remove([avatarStoragePath(userId)]);
+  }
+
+  function applyAvatarToEl(el, userOrId, displayname) {
+    if (!el) return;
+    const url = getAvatarUrl(userOrId);
+    const letter = (displayname || '?').charAt(0).toUpperCase();
+    if (url) {
+      el.style.backgroundImage = `url("${url}")`;
+      el.classList.add('has-img');
+      if (el.childNodes.length && el.childNodes[0].nodeType === 3) el.childNodes[0].textContent = '';
+      else if (!el.querySelector('.dm-status-dot')) el.textContent = '';
+    } else {
+      el.style.backgroundImage = '';
+      el.classList.remove('has-img');
+      const dot = el.querySelector('.dm-status-dot');
+      if (dot) {
+        if (!el.childNodes[0] || el.childNodes[0].nodeType !== 3) el.insertBefore(document.createTextNode(letter), dot);
+        else el.childNodes[0].textContent = letter;
+      } else {
+        el.textContent = letter;
+      }
+    }
+  }
+
+  function updateProfileUI(user) {
+    if (!user) return;
+    document.getElementById('app-display-name').textContent = user.displayname;
+    document.getElementById('app-username').textContent = '@' + user.username;
+    applyAvatarToEl(document.getElementById('app-avatar'), user, user.displayname);
+    const logoutName = document.getElementById('logout-name');
+    if (logoutName) logoutName.textContent = user.displayname;
+    if (typeof renderFriendsViews === 'function') renderFriendsViews();
+    if (typeof renderDmList === 'function') renderDmList();
+    if (_activeDmFriendId && typeof loadMessages === 'function') {
+      const friend = _friendsData.friends.find(f => f.id === _activeDmFriendId);
+      if (friend) {
+        const header = document.querySelector('.dm-chat-header-avatar');
+        if (header) applyAvatarToEl(header, friend, friend.displayname);
+        const title = document.querySelector('.dm-chat-header .topbar-title');
+        if (title) title.textContent = friend.displayname;
+      }
+    }
+  }
+
+  function openSettings() {
+    const u = getCurrentUser();
+    if (!u) return;
+    _pendingAvatarDataUrl = null;
+    _pendingAvatarFile = null;
+    _pendingAvatarRemove = false;
+    document.getElementById('settings-displayname').value = u.displayname;
+    document.getElementById('settings-username').value = u.username;
+    document.getElementById('settings-avatar-input').value = '';
+    ['settings-err-username', 'settings-err-displayname'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('show');
+    });
+    ['settings-username', 'settings-displayname'].forEach(id => {
+      document.getElementById(id).classList.remove('error');
+    });
+    hideEl('settings-error');
+    hideEl('settings-success');
+    const preview = document.getElementById('settings-avatar-preview');
+    applyAvatarToEl(preview, u, u.displayname);
+    const hasAvatar = !!getAvatarUrl(u);
+    document.getElementById('settings-remove-avatar').style.display = hasAvatar ? 'block' : 'none';
+    showModal('settings-modal');
+  }
+
+  function handleAvatarFileSelect(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    hideEl('settings-error');
+    if (file.type !== 'image/png') {
+      showError('settings-error', 'Seuls les fichiers PNG sont acceptés.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showError('settings-error', 'Image trop lourde (max. 2 Mo).');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      _pendingAvatarFile = file;
+      _pendingAvatarDataUrl = reader.result;
+      _pendingAvatarRemove = false;
+      const preview = document.getElementById('settings-avatar-preview');
+      preview.style.backgroundImage = `url("${_pendingAvatarDataUrl}")`;
+      preview.classList.add('has-img');
+      preview.textContent = '';
+      document.getElementById('settings-remove-avatar').style.display = 'block';
+    };
+    reader.onerror = () => showError('settings-error', 'Impossible de lire le fichier.');
+    reader.readAsDataURL(file);
+  }
+
+  function removeAvatarPreview() {
+    _pendingAvatarDataUrl = null;
+    _pendingAvatarFile = null;
+    _pendingAvatarRemove = true;
+    document.getElementById('settings-avatar-input').value = '';
+    const u = getCurrentUser();
+    const preview = document.getElementById('settings-avatar-preview');
+    if (u) applyAvatarToEl(preview, null, u.displayname);
+    else { preview.style.backgroundImage = ''; preview.classList.remove('has-img'); preview.textContent = '?'; }
+    document.getElementById('settings-remove-avatar').style.display = 'none';
+  }
+
+  async function handleSaveProfile() {
+    const u = getCurrentUser();
+    if (!u) return;
+    hideEl('settings-error');
+    hideEl('settings-success');
+    ['settings-err-username', 'settings-err-displayname'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.classList.remove('show'); el.textContent = ''; }
+    });
+    ['settings-username', 'settings-displayname'].forEach(id => {
+      document.getElementById(id).classList.remove('error');
+    });
+
+    const displayname = document.getElementById('settings-displayname').value.trim();
+    const username = document.getElementById('settings-username').value.trim();
+    let valid = true;
+
+    if (!displayname) {
+      const err = document.getElementById('settings-err-displayname');
+      document.getElementById('settings-displayname').classList.add('error');
+      err.textContent = "Le nom d'affichage est requis.";
+      err.classList.add('show');
+      valid = false;
+    } else if (displayname.length < 2 || displayname.length > 40) {
+      const err = document.getElementById('settings-err-displayname');
+      document.getElementById('settings-displayname').classList.add('error');
+      err.textContent = 'Entre 2 et 40 caractères.';
+      err.classList.add('show');
+      valid = false;
+    }
+
+    if (!username) {
+      const err = document.getElementById('settings-err-username');
+      document.getElementById('settings-username').classList.add('error');
+      err.textContent = "Le nom d'utilisateur est requis.";
+      err.classList.add('show');
+      valid = false;
+    } else if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) {
+      const err = document.getElementById('settings-err-username');
+      document.getElementById('settings-username').classList.add('error');
+      err.textContent = 'Lettres, chiffres, _ . - (3-30 car.)';
+      err.classList.add('show');
+      valid = false;
+    }
+
+    if (!valid) return;
+
+    const btn = document.getElementById('settings-save-btn');
+    setButtonLoading(btn, true);
+
+    if (username.toLowerCase() !== u.username.toLowerCase()) {
+      const { data: taken } = await db.from('users').select('id')
+        .eq('username_lower', username.toLowerCase())
+        .neq('id', u.id)
+        .maybeSingle();
+      if (taken) {
+        setButtonLoading(btn, false);
+        const err = document.getElementById('settings-err-username');
+        document.getElementById('settings-username').classList.add('error');
+        err.textContent = "Ce nom d'utilisateur est déjà pris.";
+        err.classList.add('show');
+        return;
+      }
+    }
+
+    let avatar_url = u.avatar_url || null;
+
+    try {
+      if (_pendingAvatarRemove) {
+        avatar_url = null;
+        try { await removeAvatarFromStorage(u.id); } catch (_) {}
+        try { localStorage.removeItem('nexus_avatar_' + u.id); } catch (_) {}
+      } else if (_pendingAvatarFile) {
+        avatar_url = await uploadAvatarToStorage(u.id, _pendingAvatarFile);
+      }
+    } catch (avErr) {
+      setButtonLoading(btn, false);
+      showError('settings-error', 'Erreur photo : ' + (avErr.message || avErr));
+      return;
+    }
+
+    const { data: updated, error } = await db.from('users').update({
+      username,
+      username_lower: username.toLowerCase(),
+      displayname,
+      avatar_url
+    }).eq('id', u.id).select().single();
+
+    setButtonLoading(btn, false);
+
+    if (error) {
+      showError('settings-error', 'Erreur Supabase : ' + error.message);
+      return;
+    }
+
+    const newUser = { ...u, ...updated };
+    setCurrentUser(newUser);
+    _pendingAvatarDataUrl = null;
+    _pendingAvatarFile = null;
+    _pendingAvatarRemove = false;
+
+    updateProfileUI(newUser);
+    showError('settings-success', '✓ Profil mis à jour !');
+    showToast('Profil enregistré');
+
+    setTimeout(() => closeModal('settings-modal'), 1200);
+  }
+
+  // ─── PENDING DATA ─────────────────────────────────────
+  let pendingRegistration = null;
+  let pendingReset        = null;
+
+  // ─── CARD NAVIGATION ─────────────────────────────────
+  const ALL_CARDS = ['login-card','register-card','verify-email-card','forgot-email-card','forgot-verify-card','forgot-reset-card'];
+
+  function showAllCards(activeId) {
+    ALL_CARDS.forEach(id => {
+      const el = document.getElementById(id);
+      if (id === activeId) {
+        el.style.display = 'block';
+        el.style.animation = 'none'; void el.offsetHeight; el.style.animation = '';
+      } else { el.style.display = 'none'; }
+    });
+  }
+
+  function showLogin()       { showAllCards('login-card'); hideEl('login-error'); }
+  function showRegister()    { showAllCards('register-card'); clearRegisterErrors(); }
+  function showForgotEmail() { hideEl('forgot-email-error'); document.getElementById('forgot-email-input').value=''; showAllCards('forgot-email-card'); }
+
+  // ─── HELPERS ─────────────────────────────────────────
+  function generateCode() { return Math.floor(100000 + Math.random() * 900000).toString(); }
+
+  async function sendEmailCode(templateId, params) {
+    return emailjs.send(EMAILJS_SERVICE_ID, templateId, params);
+  }
+
+  function setButtonLoading(btn, loading) {
+    if (!btn) return;
+    if (loading) { btn.disabled=true; btn.dataset.orig=btn.textContent; btn.textContent='⏳ Chargement…'; }
+    else { btn.disabled=false; btn.textContent=btn.dataset.orig||btn.textContent; }
+  }
+
+  function showError(id, msg) { const el=document.getElementById(id); if(!el) return; el.textContent=msg; el.classList.add('show'); }
+  function hideEl(id) { const el=document.getElementById(id); if(el) el.classList.remove('show'); }
+
+  // ─── OTP ─────────────────────────────────────────────
+  function initOTPInputs(containerId) {
+    const inputs = Array.from(document.querySelectorAll('#'+containerId+' .otp-input'));
+    inputs.forEach((input, idx) => {
+      input.addEventListener('input', e => {
+        const val = e.target.value.replace(/\D/g,''); e.target.value=val.slice(-1);
+        input.classList.toggle('filled', !!e.target.value);
+        if (e.target.value && idx < inputs.length-1) inputs[idx+1].focus();
+      });
+      input.addEventListener('keydown', e => {
+        if (e.key==='Backspace' && !e.target.value && idx>0) {
+          inputs[idx-1].value=''; inputs[idx-1].classList.remove('filled'); inputs[idx-1].focus();
+        }
+      });
+      input.addEventListener('paste', e => {
+        e.preventDefault();
+        const pasted = e.clipboardData.getData('text').replace(/\D/g,'');
+        inputs.forEach((inp,i) => { inp.value=pasted[i]||''; inp.classList.toggle('filled',!!inp.value); });
+        inputs[Math.min(pasted.length, inputs.length-1)].focus();
+      });
+    });
+  }
+
+  function getOTPValue(containerId) {
+    return Array.from(document.querySelectorAll('#'+containerId+' .otp-input')).map(i=>i.value).join('');
+  }
+  function clearOTP(containerId) {
+    document.querySelectorAll('#'+containerId+' .otp-input').forEach(i=>{ i.value=''; i.classList.remove('filled','otp-error'); });
+  }
+  function focusFirstOTP(containerId) {
+    setTimeout(()=>{ const f=document.querySelector('#'+containerId+' .otp-input'); if(f) f.focus(); },80);
+  }
+
+  // ─── TIMER ───────────────────────────────────────────
+  const _timers = {};
+  function startCountdown(timerId, durationMs) {
+    clearInterval(_timers[timerId]);
+    const end = Date.now()+durationMs;
+    const el = document.getElementById(timerId);
+    function tick() {
+      const rem=Math.max(0,end-Date.now()), m=Math.floor(rem/60000), s=Math.floor((rem%60000)/1000);
+      if (el) {
+        el.textContent=`Code valide pendant ${m}:${s.toString().padStart(2,'0')}`;
+        el.classList.toggle('expiring', rem<90000&&rem>0);
+        if (rem===0) { el.textContent='⚠️ Code expiré — renvoie un nouveau code.'; clearInterval(_timers[timerId]); }
+      }
+    }
+    tick(); _timers[timerId]=setInterval(tick,1000);
+  }
+
+  function startResendCooldown(linkId, timerId, seconds) {
+    const link=document.getElementById(linkId), timerEl=document.getElementById(timerId);
+    if (!link||!timerEl) return;
+    link.style.pointerEvents='none'; link.style.opacity='0.45';
+    timerEl.style.display='inline'; let rem=seconds; timerEl.textContent=` (${rem}s)`;
+    const iv=setInterval(()=>{
+      rem--; timerEl.textContent=` (${rem}s)`;
+      if(rem<=0){clearInterval(iv);link.style.pointerEvents='';link.style.opacity='';timerEl.style.display='none';}
+    },1000);
+  }
+
+  // ─── REGISTER ERRORS ─────────────────────────────────
+  function clearRegisterErrors() {
+    ['username','displayname','email','password','confirm'].forEach(f=>{
+      const el=document.getElementById('err-'+f), inp=document.getElementById('reg-'+f);
+      if(el) el.classList.remove('show'); if(inp) inp.classList.remove('error');
+    });
+    hideEl('register-error'); hideEl('register-success');
+  }
+  function fieldError(field, msg) {
+    const inp=document.getElementById('reg-'+field), err=document.getElementById('err-'+field);
+    if(inp) inp.classList.add('error'); if(err){err.textContent=msg;err.classList.add('show');}
+  }
+
+  // ─── REGISTER ────────────────────────────────────────
+  async function handleRegister() {
+    clearRegisterErrors();
+    const username    = document.getElementById('reg-username').value.trim();
+    const displayname = document.getElementById('reg-displayname').value.trim();
+    const email       = document.getElementById('reg-email').value.trim();
+    const password    = document.getElementById('reg-password').value;
+    const confirm     = document.getElementById('reg-confirm').value;
+
+    let valid=true;
+    if (!username) { fieldError('username',"Le nom d'utilisateur est requis."); valid=false; }
+    else if (!/^[a-zA-Z0-9_.-]{3,30}$/.test(username)) { fieldError('username','Lettres, chiffres, _ . - (3-30 car.)'); valid=false; }
+    if (!displayname) { fieldError('displayname',"Le nom d'affichage est requis."); valid=false; }
+    else if (displayname.length<2||displayname.length>40) { fieldError('displayname','Entre 2 et 40 caractères.'); valid=false; }
+    if (!email) { fieldError('email',"L'email est requis."); valid=false; }
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { fieldError('email',"Format d'email invalide."); valid=false; }
+    if (!password) { fieldError('password','Le mot de passe est requis.'); valid=false; }
+    else if (password.length<6) { fieldError('password','Au moins 6 caractères.'); valid=false; }
+    if (!confirm) { fieldError('confirm','Confirme ton mot de passe.'); valid=false; }
+    else if (password!==confirm) { fieldError('confirm','Les mots de passe ne correspondent pas.'); valid=false; }
+    if (!valid) return;
+
+    const btn=document.getElementById('register-btn');
+    setButtonLoading(btn,true);
+
+    const {data:existUser} = await db.from('users').select('id').eq('username_lower',username.toLowerCase()).maybeSingle();
+    if (existUser) { setButtonLoading(btn,false); showError('register-error',"Ce nom d'utilisateur est déjà pris."); return; }
+    const {data:existEmail} = await db.from('users').select('id').eq('email_lower',email.toLowerCase()).maybeSingle();
+    if (existEmail) { setButtonLoading(btn,false); showError('register-error','Un compte avec cet email existe déjà.'); return; }
+
+    const code=generateCode();
+    pendingRegistration={username,displayname,email,password,code,attempts:0,expiresAt:Date.now()+10*60*1000};
+
+    try {
+      await sendEmailCode(EMAILJS_VERIFY_TMPL,{to_email:email,username:displayname,code});
+    } catch(err) {
+      setButtonLoading(btn,false);
+      showError('register-error','Erreur EmailJS : '+(err?.text||err?.message||JSON.stringify(err))); return;
+    }
+
+    setButtonLoading(btn,false);
+    document.getElementById('verify-email-display').textContent=email;
+    document.getElementById('verify-demo-box').classList.remove('show');
+    clearOTP('verify-otp-container'); hideEl('verify-error');
+    showAllCards('verify-email-card');
+    startCountdown('verify-timer',10*60*1000);
+    focusFirstOTP('verify-otp-container');
+  }
+
+  // ─── VERIFY EMAIL ─────────────────────────────────────
+  async function handleVerifyEmail() {
+    const code=getOTPValue('verify-otp-container');
+    hideEl('verify-error');
+    if (code.length!==6) { showError('verify-error','Saisis les 6 chiffres du code.'); return; }
+    if (!pendingRegistration) { showError('verify-error',"Session expirée. Recommence l'inscription."); return; }
+    if (Date.now()>pendingRegistration.expiresAt) { showError('verify-error','Code expiré. Clique sur "Renvoyer le code".'); return; }
+    pendingRegistration.attempts++;
+    if (pendingRegistration.attempts>5) {
+      showError('verify-error',"Trop de tentatives. Recommence l'inscription.");
+      pendingRegistration=null; setTimeout(()=>showRegister(),2000); return;
+    }
+    if (code!==pendingRegistration.code) {
+      showError('verify-error',`Code incorrect. Il te reste ${6-pendingRegistration.attempts} tentative(s).`);
+      clearOTP('verify-otp-container'); focusFirstOTP('verify-otp-container'); return;
+    }
+
+    const btn=document.getElementById('verify-btn');
+    setButtonLoading(btn,true);
+    const {username,displayname,email,password}=pendingRegistration;
+    const {data:newUser,error}=await db.from('users').insert({
+      username, username_lower:username.toLowerCase(),
+      displayname, email, email_lower:email.toLowerCase(),
+      password, email_verified:true
+    }).select().single();
+    setButtonLoading(btn,false);
+    if (error) { showError('verify-error','Erreur Supabase : '+error.message); return; }
+    pendingRegistration=null; clearInterval(_timers['verify-timer']);
+    showAllCards('login-card');
+    document.getElementById('login-identifier').value=username;
+    hideEl('login-error');
+    showError('login-success','✓ Compte créé et email vérifié ! Tu peux maintenant te connecter.');
+  }
+
+  async function handleResendVerify() {
+    if (!pendingRegistration) return;
+    const code=generateCode(); pendingRegistration.code=code; pendingRegistration.attempts=0; pendingRegistration.expiresAt=Date.now()+10*60*1000;
+    startResendCooldown('verify-resend-link','verify-resend-timer',60);
+    try { await sendEmailCode(EMAILJS_VERIFY_TMPL,{to_email:pendingRegistration.email,username:pendingRegistration.displayname,code}); } catch(_){}
+    clearOTP('verify-otp-container'); startCountdown('verify-timer',10*60*1000); focusFirstOTP('verify-otp-container');
+  }
+
+  // ─── FORGOT PASSWORD ──────────────────────────────────
+  async function handleForgotSend() {
+    const email=document.getElementById('forgot-email-input').value.trim();
+    hideEl('forgot-email-error');
+    if (!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showError('forgot-email-error',"Saisis une adresse email valide."); return; }
+    const btn=document.getElementById('forgot-send-btn');
+    setButtonLoading(btn,true);
+    const {data:user}=await db.from('users').select('*').eq('email_lower',email.toLowerCase()).maybeSingle();
+    if (!user) { setButtonLoading(btn,false); showError('forgot-email-error','Aucun compte trouvé avec cet email.'); return; }
+    const code=generateCode();
+    pendingReset={email,userId:user.id,code,attempts:0,expiresAt:Date.now()+10*60*1000};
+    try {
+      await sendEmailCode(EMAILJS_RESET_TMPL,{to_email:email,code});
+    } catch(err) {
+      setButtonLoading(btn,false);
+      showError('forgot-email-error','Erreur EmailJS : '+(err?.text||err?.message||JSON.stringify(err))); return;
+    }
+    setButtonLoading(btn,false);
+    document.getElementById('forgot-email-display').textContent=email;
+    document.getElementById('forgot-demo-box').classList.remove('show');
+    clearOTP('forgot-otp-container'); hideEl('forgot-verify-error');
+    showAllCards('forgot-verify-card');
+    startCountdown('forgot-timer',10*60*1000); focusFirstOTP('forgot-otp-container');
+  }
+
+  function handleForgotVerify() {
+    const code=getOTPValue('forgot-otp-container');
+    hideEl('forgot-verify-error');
+    if (code.length!==6) { showError('forgot-verify-error','Saisis les 6 chiffres du code.'); return; }
+    if (!pendingReset||Date.now()>pendingReset.expiresAt) { showError('forgot-verify-error','Code expiré. Recommence.'); return; }
+    pendingReset.attempts++;
+    if (pendingReset.attempts>5) { showError('forgot-verify-error','Trop de tentatives. Recommence.'); pendingReset=null; setTimeout(()=>showForgotEmail(),2000); return; }
+    if (code!==pendingReset.code) {
+      showError('forgot-verify-error',`Code incorrect. Il te reste ${6-pendingReset.attempts} tentative(s).`);
+      clearOTP('forgot-otp-container'); focusFirstOTP('forgot-otp-container'); return;
+    }
+    clearInterval(_timers['forgot-timer']);
+    ['forgot-newpw','forgot-confirmpw'].forEach(id=>{ document.getElementById(id).value=''; document.getElementById(id).classList.remove('error'); });
+    ['forgot-reset-error','forgot-reset-success','err-newpw','err-confirmpw'].forEach(hideEl);
+    showAllCards('forgot-reset-card');
+    setTimeout(()=>document.getElementById('forgot-newpw').focus(),80);
+  }
+
+  async function handleForgotResend() {
+    if (!pendingReset) return;
+    const code=generateCode(); pendingReset.code=code; pendingReset.attempts=0; pendingReset.expiresAt=Date.now()+10*60*1000;
+    startResendCooldown('forgot-resend-link','forgot-resend-timer',60);
+    try { await sendEmailCode(EMAILJS_RESET_TMPL,{to_email:pendingReset.email,code}); } catch(_){}
+    clearOTP('forgot-otp-container'); startCountdown('forgot-timer',10*60*1000); focusFirstOTP('forgot-otp-container');
+  }
+
+  async function handleResetPassword() {
+    const newpw=document.getElementById('forgot-newpw').value;
+    const confirmpw=document.getElementById('forgot-confirmpw').value;
+    ['newpw','confirmpw'].forEach(f=>{ document.getElementById('err-'+f).classList.remove('show'); document.getElementById('forgot-'+f).classList.remove('error'); });
+    hideEl('forgot-reset-error');
+    let valid=true;
+    if (!newpw||newpw.length<6) { document.getElementById('forgot-newpw').classList.add('error'); document.getElementById('err-newpw').textContent='Au moins 6 caractères.'; document.getElementById('err-newpw').classList.add('show'); valid=false; }
+    if (!confirmpw) { document.getElementById('forgot-confirmpw').classList.add('error'); document.getElementById('err-confirmpw').textContent='Confirme ton mot de passe.'; document.getElementById('err-confirmpw').classList.add('show'); valid=false; }
+    else if (newpw!==confirmpw) { document.getElementById('forgot-confirmpw').classList.add('error'); document.getElementById('err-confirmpw').textContent='Les mots de passe ne correspondent pas.'; document.getElementById('err-confirmpw').classList.add('show'); valid=false; }
+    if (!valid) return;
+    if (!pendingReset) { showError('forgot-reset-error','Session expirée. Recommence.'); return; }
+    const btn=document.querySelector('#forgot-reset-card .btn-primary');
+    setButtonLoading(btn,true);
+    const {error}=await db.from('users').update({password:newpw}).eq('id',pendingReset.userId);
+    setButtonLoading(btn,false);
+    if (error) { showError('forgot-reset-error','Erreur Supabase : '+error.message); return; }
+    const {data:u}=await db.from('users').select('username').eq('id',pendingReset.userId).single();
+    pendingReset=null;
+    showError('forgot-reset-success','✓ Mot de passe modifié avec succès !');
+    setTimeout(()=>{
+      showAllCards('login-card');
+      if(u) document.getElementById('login-identifier').value=u.username;
+      hideEl('login-error'); showError('login-success','✓ Mot de passe mis à jour ! Tu peux maintenant te connecter.');
+    },1800);
+  }
+
+  // ─── LOGIN ────────────────────────────────────────────
+  async function handleLogin() {
+    const identifier=document.getElementById('login-identifier').value.trim();
+    const password=document.getElementById('login-password').value;
+    hideEl('login-error'); hideEl('login-success');
+    if (!identifier||!password) { showError('login-error','Remplis tous les champs.'); return; }
+    const btn=document.querySelector('#login-card .btn-primary');
+    setButtonLoading(btn,true);
+    let {data:user}=await db.from('users').select('*').eq('username_lower',identifier.toLowerCase()).maybeSingle();
+    if (!user) { const {data:byEmail}=await db.from('users').select('*').eq('email_lower',identifier.toLowerCase()).maybeSingle(); user=byEmail; }
+    setButtonLoading(btn,false);
+    if (!user||user.password!==password) {
+      showError('login-error','Identifiants incorrects. Vérifie ton email/pseudo et mot de passe.');
+      document.getElementById('login-password').classList.add('error');
+      setTimeout(()=>document.getElementById('login-password').classList.remove('error'),1500); return;
+    }
+    setCurrentUser(user); loadApp(user);
+  }
+
+  // ─── LOAD APP ─────────────────────────────────────────
+  function loadApp(user) {
+    updateProfileUI(user);
+    document.getElementById('auth-overlay').style.animation='fadeOut 0.35s ease forwards';
+    setTimeout(()=>{ document.getElementById('auth-overlay').style.display='none'; document.getElementById('app').classList.add('visible'); },320);
+  }
+
+  // ─── LOGOUT ───────────────────────────────────────────
+  function handleLogout() {
+    sessionStorage.removeItem('nexus_current');
+    closeModal('logout-modal');
+    document.getElementById('app').classList.remove('visible');
+    document.getElementById('auth-overlay').style.display='flex';
+    document.getElementById('auth-overlay').style.animation='fadeIn 0.35s ease';
+    showAllCards('login-card');
+    document.getElementById('login-identifier').value='';
+    document.getElementById('login-password').value='';
+    hideEl('login-error'); hideEl('login-success');
+  }
+
+  // ─── UI ───────────────────────────────────────────────
+  function switchTab(el) { document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active')); el.classList.add('active'); }
+  function setActiveServer(el) { document.querySelectorAll('.server-pill').forEach(s=>s.classList.remove('active')); el.classList.add('active'); }
+
+  const TAB_VIEWS = { online:'friends-view', all:'all-view', pending:'pending-view', blocked:'blocked-view' };
+  function switchTopTab(el, view) {
+    document.querySelectorAll('.topbar-tab:not(.add-friend-tab)').forEach(b=>b.classList.remove('active'));
+    el.classList.add('active');
+    Object.values(TAB_VIEWS).forEach(id=>{ const v=document.getElementById(id); if(v) v.style.display='none'; });
+    const target = document.getElementById(TAB_VIEWS[view]);
+    if(target) target.style.display='flex';
+  }
+  function showFriendsView(e) {
+    document.querySelectorAll('.dm-nav-item').forEach(n=>n.classList.remove('active'));
+    if(e&&e.currentTarget) e.currentTarget.classList.add('active');
+    Object.values(TAB_VIEWS).forEach(id=>{ const v=document.getElementById(id); if(v) v.style.display='none'; });
+    document.getElementById('friends-view').style.display='flex';
+  }
+  function showModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('.modal').forEach(m=>{ m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); }); });
+
+  document.getElementById('login-password').addEventListener('keydown',e=>{ if(e.key==='Enter') handleLogin(); });
+  document.getElementById('login-identifier').addEventListener('keydown',e=>{ if(e.key==='Enter') handleLogin(); });
+  document.getElementById('forgot-email-input').addEventListener('keydown',e=>{ if(e.key==='Enter') handleForgotSend(); });
+  document.getElementById('forgot-newpw').addEventListener('keydown',e=>{ if(e.key==='Enter') handleResetPassword(); });
+  document.getElementById('forgot-confirmpw').addEventListener('keydown',e=>{ if(e.key==='Enter') handleResetPassword(); });
+
+  initOTPInputs('verify-otp-container');
+  initOTPInputs('forgot-otp-container');
+
+  const existingUser=getCurrentUser();
+  if (existingUser) { document.getElementById('auth-overlay').style.display='none'; loadApp(existingUser); }
+
+  const _s=document.createElement('style');
+  _s.textContent='@keyframes fadeOut{from{opacity:1}to{opacity:0}}';
+  document.head.appendChild(_s);
+
+  // ══════════════════════════════════════════════════════
+  // ─── FRIEND SYSTEM ────────────────────────────────────
+  // ══════════════════════════════════════════════════════
+
+  let _friendsData = { friends: [], pendingIn: [], pendingOut: [] };
+  let _dmConversations = {}; // friendId -> [{sender_id, content, created_at}]
+  let _activeDmFriendId = null;
+  let _msgPollingInterval = null;
+  let _friendsPollingInterval = null;
+
+  // ── Toast ─────────────────────────────────────────────
+  function showToast(msg, duration=3000) {
+    const t = document.getElementById('nexus-toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), duration);
+  }
+
+  // ── Load full friend state ─────────────────────────────
+  async function loadFriendState() {
+    const u = getCurrentUser(); if (!u) return;
+    const [{ data: fr }, { data: req }] = await Promise.all([
+      db.from('friendships').select('*').or(`user_id.eq.${u.id},friend_id.eq.${u.id}`).eq('status','accepted'),
+      db.from('friendships').select('*').or(`user_id.eq.${u.id},friend_id.eq.${u.id}`).eq('status','pending')
+    ]);
+    const friendIds = (fr||[]).map(r => r.user_id === u.id ? r.friend_id : r.user_id);
+    const pendingInIds = (req||[]).filter(r => r.friend_id === u.id).map(r => r.user_id);
+    const pendingOutIds = (req||[]).filter(r => r.user_id === u.id).map(r => r.friend_id);
+    const allIds = [...new Set([...friendIds, ...pendingInIds, ...pendingOutIds])];
+    let usersMap = {};
+    if (allIds.length) {
+      const { data: usersArr } = await db.from('users').select('id,username,displayname,avatar_url').in('id', allIds);
+      (usersArr||[]).forEach(u => usersMap[u.id] = u);
+    }
+    _friendsData = {
+      friends: friendIds.map(id => usersMap[id]).filter(Boolean),
+      pendingIn: pendingInIds.map(id => usersMap[id]).filter(Boolean),
+      pendingOut: pendingOutIds.map(id => usersMap[id]).filter(Boolean)
+    };
+    renderFriendsViews();
+    renderDmList();
+  }
+
+  // ── Render friends list ────────────────────────────────
+  function renderFriendsViews() {
+    const { friends, pendingIn, pendingOut } = _friendsData;
+
+    // Online tab
+    const fl = document.getElementById('friends-list');
+    const fcl = document.getElementById('friends-count-label');
+    if (fcl) fcl.textContent = `EN LIGNE — ${friends.length}`;
+    if (fl) {
+      if (!friends.length) {
+        fl.innerHTML = `<div class="friends-empty">
+          <div class="friends-empty-img"><svg width="120" height="80" viewBox="0 0 200 140" fill="none"><ellipse cx="100" cy="70" rx="90" ry="50" fill="rgba(91,115,255,0.05)"/><circle cx="72" cy="62" r="28" fill="var(--bg-surface)"/><circle cx="128" cy="62" r="28" fill="var(--bg-surface)"/><circle cx="72" cy="60" r="18" fill="var(--bg-hover)"/><circle cx="128" cy="60" r="18" fill="var(--bg-hover)"/><circle cx="66" cy="56" r="6" fill="var(--text-muted)" opacity="0.4"/><circle cx="122" cy="56" r="6" fill="var(--text-muted)" opacity="0.4"/><path d="M60 75 Q72 82 84 75" stroke="var(--text-muted)" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.4"/><path d="M116 75 Q128 82 140 75" stroke="var(--text-muted)" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.4"/></svg></div>
+          <div class="friends-empty-text">Personne n'est en ligne pour l'instant.</div>
+          <div class="friends-empty-sub">Mais t'inquiète, tes amis se connecteront bientôt !</div>
+        </div>`;
+      } else {
+        fl.innerHTML = friends.map(f => friendCard(f, 'friend')).join('');
+      }
+    }
+
+    // All tab
+    const av = document.getElementById('all-view');
+    if (av) {
+      const all = [...friends];
+      av.querySelector('.friends-section-label') && (av.querySelector('.friends-section-label').textContent = `TOUS LES AMIS — ${all.length}`);
+      const list = av.querySelector('.friends-list');
+      if (list) list.innerHTML = all.length
+        ? all.map(f => friendCard(f, 'friend')).join('')
+        : `<div class="friends-empty"><div class="friends-empty-text">Tu n'as encore aucun ami.</div><div class="friends-empty-sub">Utilise "Ajouter un ami" pour en trouver !</div></div>`;
+    }
+
+    // Pending tab
+    const pv = document.getElementById('pending-view');
+    const pl = document.getElementById('pending-list');
+    const pcl = document.getElementById('pending-count-label');
+    const total = pendingIn.length + pendingOut.length;
+    if (pcl) pcl.textContent = `EN ATTENTE — ${total}`;
+    if (pl) {
+      if (!total) {
+        pl.innerHTML = `<div class="friends-empty"><div class="friends-empty-text">Aucune demande en attente.</div></div>`;
+      } else {
+        pl.innerHTML = [
+          ...pendingIn.map(f => friendCard(f, 'incoming')),
+          ...pendingOut.map(f => friendCard(f, 'outgoing'))
+        ].join('');
+      }
+    }
+  }
+
+  function friendAvatarHtml(f) {
+    const url = getAvatarUrl(f);
+    const letter = f.displayname.charAt(0).toUpperCase();
+    if (url) {
+      return `<div class="friend-avatar has-img" style="background-image:url('${url.replace(/'/g, '%27')}')"></div>`;
+    }
+    return `<div class="friend-avatar">${letter}</div>`;
+  }
+
+  function friendCard(f, type) {
+    let actions = '';
+    if (type === 'incoming') {
+      actions = `
+        <button class="friend-btn accept" title="Accepter" onclick="handleAcceptFriend('${f.id}')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        </button>
+        <button class="friend-btn decline" title="Refuser" onclick="handleDeclineFriend('${f.id}')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>`;
+    } else if (type === 'outgoing') {
+      actions = `<span class="pending-direction">En attente…</span>
+        <button class="friend-btn decline" title="Annuler" onclick="handleCancelFriend('${f.id}')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>`;
+    } else {
+      actions = `
+        <button class="friend-btn msg" title="Envoyer un message" onclick="openDmWith('${f.id}')">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        </button>`;
+    }
+    const label = type === 'incoming' ? '→ Demande reçue' : type === 'outgoing' ? '← Demande envoyée' : '';
+    return `<div class="friend-card">
+      ${friendAvatarHtml(f)}
+      <div class="friend-info">
+        <div class="friend-name">${f.displayname}${label ? ` <span style="font-size:11px;color:var(--text-muted);font-weight:400">${label}</span>` : ''}</div>
+        <div class="friend-tag">@${f.username}</div>
+      </div>
+      <div class="friend-actions">${actions}</div>
+    </div>`;
+  }
+
+  // ── Render DM sidebar list ─────────────────────────────
+  function renderDmList() {
+    const dmList = document.getElementById('dm-list');
+    const { friends } = _friendsData;
+    if (!friends.length) {
+      dmList.innerHTML = `<div class="dm-empty"><p>Aucune conversation.<br>Ajoute un ami pour commencer !</p></div>`;
+      return;
+    }
+    dmList.innerHTML = friends.map(f => {
+      const url = getAvatarUrl(f);
+      const letter = f.displayname.charAt(0).toUpperCase();
+      const avStyle = url ? ` style="background-image:url('${url.replace(/'/g, '%27')}')"` : '';
+      const avClass = 'dm-user-item-avatar' + (url ? ' has-img' : '');
+      const avContent = url ? '' : letter;
+      return `
+      <div class="dm-user-item${_activeDmFriendId === f.id ? ' active' : ''}" onclick="openDmWith('${f.id}')" id="dm-item-${f.id}">
+        <div class="${avClass}"${avStyle}>${avContent}</div>
+        <span class="dm-user-item-name">${escapeHtml(f.displayname)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Open DM chat ───────────────────────────────────────
+  async function openDmWith(friendId) {
+    const friend = _friendsData.friends.find(f => f.id === friendId);
+    if (!friend) return;
+    _activeDmFriendId = friendId;
+
+    // Update sidebar highlight
+    document.querySelectorAll('.dm-user-item').forEach(el => el.classList.remove('active'));
+    const item = document.getElementById('dm-item-'+friendId);
+    if (item) item.classList.add('active');
+
+    // Hide friends views, show chat
+    document.querySelectorAll('.friends-view').forEach(v => v.style.display='none');
+    document.getElementById('dm-chat-view').style.display='flex';
+    document.getElementById('dm-chat-view').style.flexDirection='column';
+    document.getElementById('dm-chat-view').style.flex='1';
+    document.getElementById('dm-chat-view').style.overflow='hidden';
+
+    // Update topbar
+    const fUrl = getAvatarUrl(friend);
+    const fLetter = friend.displayname.charAt(0).toUpperCase();
+    const fAvStyle = fUrl ? ` style="background-image:url('${fUrl.replace(/'/g, '%27')}')"` : '';
+    const fAvClass = 'dm-chat-header-avatar' + (fUrl ? ' has-img' : '');
+    document.getElementById('main-topbar').innerHTML = `
+      <div class="topbar-left dm-chat-header">
+        <div class="${fAvClass}"${fAvStyle}>${fUrl ? '' : fLetter}</div>
+        <span class="topbar-title">${escapeHtml(friend.displayname)}</span>
+        <span style="font-size:12px;color:var(--text-muted)">@${escapeHtml(friend.username)}</span>
+      </div>
+      <div class="topbar-actions" style="margin-left:auto">
+        <button class="topbar-icon-btn" title="Retour aux amis" onclick="backToFriends()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+      </div>`;
+
+    // Update DM input placeholder
+    document.getElementById('dm-chat-input').placeholder = `Écrire à ${friend.displayname}…`;
+
+    // Update sidebar "Amis" nav item
+    document.querySelectorAll('.dm-nav-item').forEach(n => n.classList.remove('active'));
+
+    await loadMessages(friendId);
+    startMsgPolling(friendId);
+  }
+
+  function backToFriends() {
+    _activeDmFriendId = null;
+    stopMsgPolling();
+    document.getElementById('dm-chat-view').style.display='none';
+    document.getElementById('friends-view').style.display='flex';
+
+    // Reset topbar
+    document.getElementById('main-topbar').innerHTML = `
+      <div class="topbar-left">
+        <div class="topbar-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        </div>
+        <span class="topbar-title">Amis</span>
+      </div>
+      <div class="topbar-sep"></div>
+      <div class="topbar-tabs">
+        <button class="topbar-tab active" onclick="switchTopTab(this,'online')">En ligne</button>
+        <button class="topbar-tab" onclick="switchTopTab(this,'all')">Tous</button>
+        <button class="topbar-tab" onclick="switchTopTab(this,'pending')">En attente</button>
+        <button class="topbar-tab" onclick="switchTopTab(this,'blocked')">Bloqués</button>
+        <button class="topbar-tab add-friend-tab" onclick="showModal('add-friend-modal')">Ajouter un ami</button>
+      </div>
+      <div class="topbar-actions">
+        <button class="topbar-icon-btn" title="Nouvelle conversation DM">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+        </button>
+        <div class="topbar-divider"></div>
+        <button class="topbar-icon-btn" title="Boîte de réception">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>
+        </button>
+        <button class="topbar-icon-btn" title="Aide">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z"/></svg>
+        </button>
+      </div>`;
+
+    document.querySelectorAll('.dm-nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelector('.dm-nav-item') && document.querySelector('.dm-nav-item').classList.add('active');
+    renderDmList();
+  }
+
+  // ── Load messages ──────────────────────────────────────
+  async function loadMessages(friendId) {
+    const u = getCurrentUser(); if (!u) return;
+    const { data: msgs } = await db.from('messages')
+      .select('*')
+      .or(`and(sender_id.eq.${u.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${u.id})`)
+      .order('created_at', { ascending: true });
+    renderMessages(msgs || [], u.id);
+  }
+
+  function renderMessages(msgs, myId) {
+    const container = document.getElementById('dm-chat-messages');
+    if (!msgs.length) {
+      container.innerHTML = `<div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:14px;text-align:center">
+        <div><div style="font-size:40px;margin-bottom:12px">💬</div><div>C'est le début de votre conversation.</div><div style="font-size:12px;margin-top:4px">Dis bonjour !</div></div>
+      </div>`;
+      return;
+    }
+    container.innerHTML = msgs.map(m => {
+      const isOwn = m.sender_id === myId;
+      const time = new Date(m.created_at).toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+      return `<div class="msg-row${isOwn ? ' own' : ''}">
+        <div class="msg-bubble${isOwn ? ' own' : ''}">${escapeHtml(m.content)}</div>
+        <span style="font-size:10px;color:var(--text-muted);margin:2px 4px">${time}</span>
+      </div>`;
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Send message ───────────────────────────────────────
+  async function handleSendMessage() {
+    const u = getCurrentUser(); if (!u || !_activeDmFriendId) return;
+    const input = document.getElementById('dm-chat-input');
+    const content = input.value.trim();
+    if (!content) return;
+    input.value = '';
+    await db.from('messages').insert({ sender_id: u.id, receiver_id: _activeDmFriendId, content });
+    await loadMessages(_activeDmFriendId);
+  }
+
+  // ── Polling for messages ───────────────────────────────
+  function startMsgPolling(friendId) {
+    stopMsgPolling();
+    _msgPollingInterval = setInterval(() => { if (_activeDmFriendId === friendId) loadMessages(friendId); }, 3000);
+  }
+  function stopMsgPolling() { if (_msgPollingInterval) { clearInterval(_msgPollingInterval); _msgPollingInterval = null; } }
+
+  // ── Send friend request ────────────────────────────────
+  async function handleSendFriendRequest() {
+    const u = getCurrentUser(); if (!u) return;
+    const username = document.getElementById('add-friend-input').value.trim();
+    hideEl('add-friend-error'); hideEl('add-friend-success');
+    if (!username) { showError('add-friend-error',"Saisis un nom d'utilisateur."); return; }
+    if (username.toLowerCase() === u.username.toLowerCase()) { showError('add-friend-error',"Tu ne peux pas t'ajouter toi-même."); return; }
+
+    const { data: target } = await db.from('users').select('id,username,displayname,avatar_url').eq('username_lower', username.toLowerCase()).maybeSingle();
+    if (!target) { showError('add-friend-error',"Aucun utilisateur trouvé avec ce pseudo."); return; }
+
+    // Check existing
+    const { data: existing } = await db.from('friendships')
+      .select('id,status')
+      .or(`and(user_id.eq.${u.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${u.id})`)
+      .maybeSingle();
+    if (existing) {
+      if (existing.status === 'accepted') { showError('add-friend-error',"Vous êtes déjà amis !"); return; }
+      if (existing.status === 'pending') { showError('add-friend-error',"Une demande est déjà en cours."); return; }
+    }
+
+    const { error } = await db.from('friendships').insert({ user_id: u.id, friend_id: target.id, status: 'pending' });
+    if (error) { showError('add-friend-error',"Erreur : " + error.message); return; }
+    showError('add-friend-success', `✓ Demande envoyée à ${target.displayname} !`);
+    document.getElementById('add-friend-input').value = '';
+    await loadFriendState();
+  }
+
+  // ── Accept friend request ──────────────────────────────
+  async function handleAcceptFriend(fromId) {
+    const u = getCurrentUser(); if (!u) return;
+    await db.from('friendships')
+      .update({ status: 'accepted' })
+      .eq('user_id', fromId).eq('friend_id', u.id);
+    showToast('✅ Ami accepté !');
+    await loadFriendState();
+  }
+
+  // ── Decline friend request ─────────────────────────────
+  async function handleDeclineFriend(fromId) {
+    const u = getCurrentUser(); if (!u) return;
+    await db.from('friendships')
+      .delete()
+      .eq('user_id', fromId).eq('friend_id', u.id);
+    showToast('❌ Demande refusée.');
+    await loadFriendState();
+  }
+
+  // ── Cancel outgoing request ────────────────────────────
+  async function handleCancelFriend(toId) {
+    const u = getCurrentUser(); if (!u) return;
+    await db.from('friendships')
+      .delete()
+      .eq('user_id', u.id).eq('friend_id', toId);
+    showToast('Demande annulée.');
+    await loadFriendState();
+  }
+
+  // ── Patch loadApp to also load friends ────────────────
+  const _origLoadApp = loadApp;
+  loadApp = function(user) {
+    _origLoadApp(user);
+    setTimeout(() => {
+      loadFriendState();
+      _friendsPollingInterval = setInterval(loadFriendState, 8000);
+    }, 400);
+  };
+
+  // ── Enter key in chat input ────────────────────────────
+  document.getElementById('dm-chat-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleSendMessage();
+  });
+
+  // ── Enter key in add-friend input ─────────────────────
+  document.getElementById('add-friend-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') handleSendFriendRequest();
+  });
+</script>
+</body>
+</html>
