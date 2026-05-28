@@ -997,11 +997,126 @@
 
   /* ─── SETTINGS / PROFIL ─────────────────────────────── */
   .settings-modal-card {
-    width: 480px;
+    width: 640px;
     max-width: 95vw;
     max-height: 90vh;
-    overflow-y: auto;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
   }
+  .settings-layout {
+    display: flex;
+    min-height: 420px;
+    max-height: calc(90vh - 60px);
+    overflow: hidden;
+  }
+  .settings-nav {
+    width: 168px;
+    flex-shrink: 0;
+    background: var(--bg-mid);
+    border-right: 1px solid var(--border);
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .settings-nav-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    padding: 8px 10px 4px;
+  }
+  .settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    border-radius: var(--radius-xs);
+    background: none;
+    color: var(--text-secondary);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .settings-nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .settings-nav-item.active {
+    background: var(--bg-active);
+    color: var(--text-primary);
+  }
+  .settings-nav-icon {
+    width: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.85;
+  }
+  .settings-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 22px;
+    min-width: 0;
+  }
+  .settings-panel { display: none; }
+  .settings-panel.active { display: block; }
+  .settings-panel-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .settings-panel-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 20px;
+    line-height: 1.5;
+  }
+  .voice-test-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-mid);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+  }
+  .voice-meter {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-deepest);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .voice-meter-fill {
+    height: 100%;
+    width: 0%;
+    background: var(--success);
+    border-radius: 4px;
+    transition: width 0.08s linear;
+  }
+  .btn-voice-test {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xs);
+    padding: 8px 14px;
+    color: var(--text-primary);
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-voice-test:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-voice-test.active { background: rgba(248,113,113,0.15); border-color: var(--danger); color: var(--danger); }
   .settings-section-title {
     font-size: 11px;
     font-weight: 700;
@@ -1275,6 +1390,165 @@
     white-space: nowrap;
   }
   #nexus-toast.show { opacity: 1; }
+
+  /* ─── APPELS VOCAUX (style Discord) ─────────────────── */
+  .call-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 4000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    animation: fadeIn 0.2s ease;
+  }
+  .call-overlay.open { display: flex; }
+  .call-card {
+    background: var(--bg-deep);
+    border: 1px solid var(--border-strong);
+    border-radius: 16px;
+    padding: 36px 40px 32px;
+    width: 360px;
+    max-width: 95vw;
+    text-align: center;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+    animation: slideUp 0.35s cubic-bezier(0.16,1,0.3,1);
+  }
+  .call-avatar-wrap {
+    position: relative;
+    width: 112px; height: 112px;
+    margin: 0 auto 20px;
+  }
+  .call-avatar-ring {
+    position: absolute; inset: -8px;
+    border-radius: 50%;
+    border: 3px solid var(--success);
+    animation: callPulse 1.6s ease-out infinite;
+    opacity: 0.7;
+  }
+  @keyframes callPulse {
+    0% { transform: scale(0.92); opacity: 0.9; }
+    70% { transform: scale(1.12); opacity: 0; }
+    100% { transform: scale(1.12); opacity: 0; }
+  }
+  .call-avatar {
+    width: 112px; height: 112px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    background-size: cover;
+    background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 44px; font-weight: 700;
+    color: #fff;
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+  }
+  .call-avatar.has-img { color: transparent; }
+  .call-status {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+  }
+  .call-name {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 28px;
+  }
+  .call-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+  }
+  .call-round-btn {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.12s, filter 0.15s;
+  }
+  .call-round-btn:active { transform: scale(0.94); }
+  .call-round-btn.accept { background: var(--success); color: #fff; }
+  .call-round-btn.accept:hover { filter: brightness(1.08); }
+  .call-round-btn.decline { background: var(--danger); color: #fff; }
+  .call-round-btn.decline:hover { filter: brightness(1.08); }
+  .call-round-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+  .call-action-col { display: flex; flex-direction: column; align-items: center; }
+
+  .voice-bar {
+    position: fixed;
+    bottom: 0; left: 72px; right: 0;
+    height: 52px;
+    background: #1e1f22;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: none;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    z-index: 3500;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.35);
+  }
+  .voice-bar.visible { display: flex; }
+  .voice-bar-status {
+    display: flex; align-items: center; gap: 8px;
+    min-width: 140px;
+  }
+  .voice-bar-signal {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+  }
+  .voice-bar-label {
+    font-size: 13px; font-weight: 600;
+    color: var(--success);
+  }
+  .voice-bar-info {
+    flex: 1;
+    font-size: 13px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .voice-bar-info strong { color: var(--text-primary); font-weight: 600; }
+  .voice-bar-timer {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    min-width: 42px;
+  }
+  .voice-bar-controls {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .voice-ctrl-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s, color 0.12s;
+  }
+  .voice-ctrl-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .voice-ctrl-btn.active { background: rgba(248,113,113,0.2); color: var(--danger); }
+  .voice-ctrl-btn.hangup {
+    background: var(--danger);
+    color: #fff;
+    width: 40px; height: 40px;
+  }
+  .voice-ctrl-btn.hangup:hover { background: #ef4444; }
+  .topbar-icon-btn.call-start:hover { color: var(--success); }
 </style>
 </head>
 <body>
@@ -1715,48 +1989,99 @@
 <!-- Settings -->
 <div class="modal" id="settings-modal">
   <div class="modal-card settings-modal-card">
-    <div class="modal-title">Mon compte</div>
-    <div class="modal-desc" style="margin-bottom:8px">Modifie ton profil comme sur Discord — photo, nom d'affichage et nom d'utilisateur.</div>
+    <div class="global-error" id="settings-error" style="margin:12px 22px 0"></div>
+    <div class="global-success" id="settings-success" style="margin:8px 22px 0"></div>
 
-    <div class="global-error" id="settings-error"></div>
-    <div class="global-success" id="settings-success"></div>
+    <div class="settings-layout">
+      <nav class="settings-nav">
+        <div class="settings-nav-title">Paramètres</div>
+        <button type="button" class="settings-nav-item active" data-settings-tab="account" onclick="switchSettingsTab('account')">
+          <span class="settings-nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+          </span>
+          Mon compte
+        </button>
+        <button type="button" class="settings-nav-item" data-settings-tab="voice" onclick="switchSettingsTab('voice')">
+          <span class="settings-nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+          </span>
+          Vocal
+        </button>
+      </nav>
 
-    <div class="settings-section-title">Profil public</div>
-    <div class="settings-profile-preview">
-      <div class="settings-banner-preview" id="settings-banner-preview"></div>
-      <div class="settings-avatar-on-banner" id="settings-avatar-preview">?</div>
-      <div class="settings-banner-actions">
-        <label class="btn-upload">
-          Bannière
-          <input type="file" id="settings-banner-input" accept="image/png" onchange="handleBannerFileSelect(event)">
-        </label>
-        <button type="button" class="btn-remove-avatar" id="settings-remove-banner" onclick="removeBannerPreview()" style="display:none">Retirer bannière</button>
-        <label class="btn-upload" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border-strong)">
-          Avatar
-          <input type="file" id="settings-avatar-input" accept="image/png" onchange="handleAvatarFileSelect(event)">
-        </label>
-        <button type="button" class="btn-remove-avatar" id="settings-remove-avatar" onclick="removeAvatarPreview()" style="display:none">Retirer avatar</button>
+      <div class="settings-content">
+        <!-- Compte -->
+        <div class="settings-panel active" id="settings-panel-account">
+          <h2 class="settings-panel-title">Mon compte</h2>
+          <p class="settings-panel-desc">Photo, bannière, nom d'affichage et nom d'utilisateur.</p>
+
+          <div class="settings-section-title">Profil public</div>
+          <div class="settings-profile-preview">
+            <div class="settings-banner-preview" id="settings-banner-preview"></div>
+            <div class="settings-avatar-on-banner" id="settings-avatar-preview">?</div>
+            <div class="settings-banner-actions">
+              <label class="btn-upload">
+                Bannière
+                <input type="file" id="settings-banner-input" accept="image/png" onchange="handleBannerFileSelect(event)">
+              </label>
+              <button type="button" class="btn-remove-avatar" id="settings-remove-banner" onclick="removeBannerPreview()" style="display:none">Retirer bannière</button>
+              <label class="btn-upload" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border-strong)">
+                Avatar
+                <input type="file" id="settings-avatar-input" accept="image/png" onchange="handleAvatarFileSelect(event)">
+              </label>
+              <button type="button" class="btn-remove-avatar" id="settings-remove-avatar" onclick="removeAvatarPreview()" style="display:none">Retirer avatar</button>
+            </div>
+          </div>
+          <p class="settings-avatar-hint" style="margin:-28px 0 16px">PNG recommandé — bannière 600×240, avatar 256×256.</p>
+
+          <div class="settings-section-title">Profil</div>
+          <div class="form-group">
+            <label class="form-label">Nom d'affichage</label>
+            <input type="text" class="form-input" id="settings-displayname" placeholder="Comment les autres te voient" maxlength="40">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Nom d'utilisateur</label>
+            <input type="text" class="form-input" id="settings-username" placeholder="pseudo_unique" maxlength="30">
+            <div class="form-error" id="settings-err-username"></div>
+            <div class="form-error" id="settings-err-displayname"></div>
+          </div>
+          <div class="settings-actions" style="border-top:none;padding-top:16px;margin-top:8px">
+            <button class="btn-primary" id="settings-save-btn" style="width:auto;margin:0;padding:10px 24px" onclick="handleSaveProfile()">Enregistrer le profil</button>
+          </div>
+        </div>
+
+        <!-- Vocal -->
+        <div class="settings-panel" id="settings-panel-voice">
+          <h2 class="settings-panel-title">Vocal</h2>
+          <p class="settings-panel-desc">Choisis ton micro et ton casque pour les appels, comme sur Discord.</p>
+
+          <div class="form-group">
+            <label class="form-label">Microphone</label>
+            <select class="form-input" id="settings-mic-select" onchange="saveVoiceDeviceSettings()">
+              <option value="">Chargement…</option>
+            </select>
+            <p class="settings-field-hint">Entrée audio utilisée pendant les appels.</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Casque / haut-parleurs</label>
+            <select class="form-input" id="settings-speaker-select" onchange="saveVoiceDeviceSettings()">
+              <option value="">Chargement…</option>
+            </select>
+            <p class="settings-field-hint">Sortie audio pour entendre l'autre personne. (Chrome / Edge recommandés)</p>
+          </div>
+
+          <div class="voice-test-row">
+            <button type="button" class="btn-voice-test" id="settings-mic-test-btn" onclick="toggleMicTest()">Tester le micro</button>
+            <div class="voice-meter"><div class="voice-meter-fill" id="settings-mic-meter"></div></div>
+          </div>
+          <p class="settings-field-hint" id="settings-voice-hint" style="margin-top:10px">Autorise l'accès au micro quand le navigateur te le demande.</p>
+        </div>
       </div>
     </div>
-    <p class="settings-avatar-hint" style="margin:-28px 0 16px">PNG recommandé — bannière 600×240, avatar 256×256.</p>
 
-    <div class="settings-section-title">Profil</div>
-    <div class="form-group">
-      <label class="form-label">Nom d'affichage</label>
-      <input type="text" class="form-input" id="settings-displayname" placeholder="Comment les autres te voient" maxlength="40">
-      <p class="settings-field-hint">C'est le nom visible dans les conversations et la liste d'amis.</p>
-    </div>
-    <div class="form-group" style="margin-bottom:0">
-      <label class="form-label">Nom d'utilisateur</label>
-      <input type="text" class="form-input" id="settings-username" placeholder="pseudo_unique" maxlength="30">
-      <p class="settings-field-hint">Identifiant unique — lettres, chiffres, _ . - (3 à 30 caractères). Affiché comme @pseudo.</p>
-      <div class="form-error" id="settings-err-username"></div>
-      <div class="form-error" id="settings-err-displayname"></div>
-    </div>
-
-    <div class="settings-actions">
-      <button class="btn-ghost" onclick="closeModal('settings-modal')">Annuler</button>
-      <button class="btn-primary" id="settings-save-btn" style="width:auto;margin-top:0;padding:10px 24px" onclick="handleSaveProfile()">Enregistrer</button>
+    <div class="settings-actions" style="margin:0;border-radius:0 0 16px 16px">
+      <button class="btn-ghost" onclick="closeModal('settings-modal')">Fermer</button>
     </div>
   </div>
 </div>
@@ -1783,6 +2108,63 @@
     </div>
   </div>
 </div>
+
+<!-- Appel entrant / sortant -->
+<div class="call-overlay" id="call-overlay">
+  <div class="call-card">
+    <div class="call-avatar-wrap">
+      <div class="call-avatar-ring" id="call-ring"></div>
+      <div class="call-avatar" id="call-overlay-avatar">?</div>
+    </div>
+    <div class="call-status" id="call-overlay-status">Appel entrant…</div>
+    <div class="call-name" id="call-overlay-name">Utilisateur</div>
+    <div class="call-actions" id="call-overlay-incoming">
+      <div class="call-action-col">
+        <button type="button" class="call-round-btn decline" onclick="declineIncomingCall()" aria-label="Refuser">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .55-.45 1-1 1H4c-.55 0-1-.45-1-1V4c0-.55.45-1 1-1h2.3c.55 0 1 .45 1 1v1.49c1.5-.48 3.1-.74 4.7-.74 4.97 0 9 4.03 9 9s-4.03 9-9 9-9-4.03-9-9h2c0 3.86 3.14 7 7 7s7-3.14 7-7-3.14-7-7-7z"/></svg>
+        </button>
+        <span class="call-round-label">Refuser</span>
+      </div>
+      <div class="call-action-col">
+        <button type="button" class="call-round-btn accept" onclick="acceptIncomingCall()" aria-label="Accepter">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </button>
+        <span class="call-round-label">Accepter</span>
+      </div>
+    </div>
+    <div class="call-actions" id="call-overlay-outgoing" style="display:none">
+      <div class="call-action-col">
+        <button type="button" class="call-round-btn decline" onclick="cancelOutgoingCall()" aria-label="Annuler">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .55-.45 1-1 1H4c-.55 0-1-.45-1-1V4c0-.55.45-1 1-1h2.3c.55 0 1 .45 1 1v1.49c1.5-.48 3.1-.74 4.7-.74 4.97 0 9 4.03 9 9s-4.03 9-9 9-9-4.03-9-9h2c0 3.86 3.14 7 7 7s7-3.14 7-7-3.14-7-7-7z"/></svg>
+        </button>
+        <span class="call-round-label">Annuler</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Barre vocale connectée (bas, style Discord) -->
+<div class="voice-bar" id="voice-bar">
+  <div class="voice-bar-status">
+    <span class="voice-bar-signal"></span>
+    <span class="voice-bar-label">En appel</span>
+  </div>
+  <div class="voice-bar-info" id="voice-bar-info">avec <strong>—</strong></div>
+  <span class="voice-bar-timer" id="voice-bar-timer">00:00</span>
+  <div class="voice-bar-controls">
+    <button type="button" class="voice-ctrl-btn" id="voice-btn-mute" title="Couper le micro" onclick="toggleCallMute()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
+    </button>
+    <button type="button" class="voice-ctrl-btn" id="voice-btn-deafen" title="Couper le son" onclick="toggleCallDeafen()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3C6.48 3 2 7.48 2 13v5a2 2 0 002 2h2v-6H4v-1c0-4.42 3.58-8 8-8s8 3.58 8 8v1h-2v6h2a2 2 0 002-2v-5c0-5.52-4.48-10-10-10z"/></svg>
+    </button>
+    <button type="button" class="voice-ctrl-btn hangup" title="Raccrocher" onclick="endCall('hangup')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .55-.45 1-1 1H4c-.55 0-1-.45-1-1V4c0-.55.45-1 1-1h2.3c.55 0 1 .45 1 1v1.49c1.5-.48 3.1-.74 4.7-.74 4.97 0 9 4.03 9 9s-4.03 9-9 9-9-4.03-9-9h2c0 3.86 3.14 7 7 7s7-3.14 7-7-3.14-7-7-7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<audio id="call-remote-audio" autoplay playsinline style="display:none"></audio>
 
 <div id="nexus-toast"></div>
 
@@ -2157,7 +2539,178 @@
     document.getElementById('settings-banner-input').value = '';
     document.getElementById('settings-avatar-input').value = '';
     updateSettingsProfilePreview(u);
+    switchSettingsTab('account');
     showModal('settings-modal');
+  }
+
+  // ─── PARAMÈTRES VOCAL (micro / casque) ─────────────────
+  const VOICE_PREFS_KEY = 'nexus_voice_prefs';
+  let _micTestStream = null;
+  let _micTestAnim = null;
+
+  function getVoicePrefs() {
+    try { return JSON.parse(localStorage.getItem(VOICE_PREFS_KEY) || '{}'); } catch { return {}; }
+  }
+
+  function saveVoicePrefs(prefs) {
+    localStorage.setItem(VOICE_PREFS_KEY, JSON.stringify(prefs));
+  }
+
+  function switchSettingsTab(tab) {
+    document.querySelectorAll('.settings-nav-item').forEach(b => {
+      b.classList.toggle('active', b.dataset.settingsTab === tab);
+    });
+    document.querySelectorAll('.settings-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'settings-panel-' + tab);
+    });
+    if (tab === 'voice') refreshVoiceDeviceLists();
+    else stopMicTest();
+  }
+
+  function deviceLabel(d, fallback, index) {
+    const label = (d.label || '').trim();
+    if (label) return label;
+    return fallback + ' ' + (index + 1);
+  }
+
+  function fillDeviceSelect(selectEl, devices, savedId, emptyLabel, fallbackPrefix) {
+    selectEl.innerHTML = '';
+    if (!devices.length) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = emptyLabel;
+      selectEl.appendChild(o);
+      return;
+    }
+    devices.forEach((d, i) => {
+      const o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = deviceLabel(d, fallbackPrefix, i);
+      selectEl.appendChild(o);
+    });
+    if (savedId && devices.some(d => d.deviceId === savedId)) selectEl.value = savedId;
+    else if (devices[0]) selectEl.value = devices[0].deviceId;
+  }
+
+  async function refreshVoiceDeviceLists() {
+    const micSel = document.getElementById('settings-mic-select');
+    const spkSel = document.getElementById('settings-speaker-select');
+    const hint = document.getElementById('settings-voice-hint');
+    if (!micSel || !spkSel) return;
+
+    micSel.innerHTML = '<option value="">Chargement…</option>';
+    spkSel.innerHTML = '<option value="">Chargement…</option>';
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+      if (hint) hint.textContent = 'Ton navigateur ne gère pas le choix des périphériques audio.';
+      return;
+    }
+
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (hint) hint.textContent = 'Les appareils sont listés. Tu peux changer de micro ou de casque à tout moment.';
+    } catch (err) {
+      if (hint) hint.textContent = 'Autorise le micro dans le navigateur pour voir la liste des appareils.';
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const mics = devices.filter(d => d.kind === 'audioinput');
+    const speakers = devices.filter(d => d.kind === 'audiooutput');
+    const prefs = getVoicePrefs();
+
+    fillDeviceSelect(micSel, mics, prefs.micId, 'Aucun micro détecté', 'Micro');
+    fillDeviceSelect(spkSel, speakers, prefs.speakerId, 'Par défaut (système)', 'Sortie');
+
+    if (!speakers.length) {
+      const o = document.createElement('option');
+      o.value = 'default';
+      o.textContent = 'Par défaut (système)';
+      spkSel.appendChild(o);
+      spkSel.value = 'default';
+      if (hint) hint.textContent = 'Sortie audio : utilise Chrome ou Edge pour choisir un casque précis.';
+    }
+
+    saveVoiceDeviceSettings();
+  }
+
+  function saveVoiceDeviceSettings() {
+    const micSel = document.getElementById('settings-mic-select');
+    const spkSel = document.getElementById('settings-speaker-select');
+    if (!micSel || !spkSel) return;
+    saveVoicePrefs({
+      micId: micSel.value || null,
+      speakerId: spkSel.value || null
+    });
+    applyVoiceOutputDevice();
+  }
+
+  async function applyVoiceOutputDevice() {
+    const prefs = getVoicePrefs();
+    const audio = document.getElementById('call-remote-audio');
+    if (!audio || !prefs.speakerId || prefs.speakerId === 'default') return;
+    if (typeof audio.setSinkId !== 'function') return;
+    try { await audio.setSinkId(prefs.speakerId); } catch (_) {}
+  }
+
+  function getVoiceAudioConstraints() {
+    const prefs = getVoicePrefs();
+    if (prefs.micId) return { audio: { deviceId: { ideal: prefs.micId } }, video: false };
+    return { audio: true, video: false };
+  }
+
+  function stopMicTest() {
+    if (_micTestAnim) { cancelAnimationFrame(_micTestAnim); _micTestAnim = null; }
+    if (_micTestStream) {
+      _micTestStream.getTracks().forEach(t => t.stop());
+      _micTestStream = null;
+    }
+    const btn = document.getElementById('settings-mic-test-btn');
+    const meter = document.getElementById('settings-mic-meter');
+    if (btn) { btn.textContent = 'Tester le micro'; btn.classList.remove('active'); }
+    if (meter) meter.style.width = '0%';
+  }
+
+  async function toggleMicTest() {
+    const btn = document.getElementById('settings-mic-test-btn');
+    const meter = document.getElementById('settings-mic-meter');
+    if (_micTestStream) { stopMicTest(); return; }
+
+    saveVoiceDeviceSettings();
+    try {
+      _micTestStream = await navigator.mediaDevices.getUserMedia(getVoiceAudioConstraints());
+    } catch (err) {
+      showToast('Micro refusé ou indisponible');
+      return;
+    }
+
+    btn.textContent = 'Arrêter le test';
+    btn.classList.add('active');
+
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = ctx.createMediaStreamSource(_micTestStream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+
+    function tick() {
+      if (!_micTestStream) return;
+      analyser.getByteFrequencyData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) sum += data[i];
+      const level = Math.min(100, (sum / data.length) * 1.4);
+      if (meter) meter.style.width = level + '%';
+      _micTestAnim = requestAnimationFrame(tick);
+    }
+    tick();
+  }
+
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', () => {
+      if (document.getElementById('settings-panel-voice')?.classList.contains('active')) {
+        refreshVoiceDeviceLists();
+      }
+    });
   }
 
   function handleAvatarFileSelect(e) {
@@ -2657,7 +3210,10 @@
     if (nav) nav.classList.add('active');
   }
   function showModal(id) { document.getElementById(id).classList.add('open'); }
-  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  function closeModal(id) {
+    if (id === 'settings-modal' && typeof stopMicTest === 'function') stopMicTest();
+    document.getElementById(id).classList.remove('open');
+  }
   document.querySelectorAll('.modal').forEach(m=>{ m.addEventListener('click',e=>{ if(e.target===m) m.classList.remove('open'); }); });
 
   document.getElementById('login-password').addEventListener('keydown',e=>{ if(e.key==='Enter') handleLogin(); });
