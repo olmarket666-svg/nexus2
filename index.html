@@ -631,6 +631,7 @@
   }
 
   .modal.open { display: flex; }
+  #profile-modal { z-index: 2500; }
 
   .modal-card {
     background: var(--bg-deep);
@@ -1129,11 +1130,33 @@
   }
   .settings-avatar-on-banner.has-img { color: transparent; }
 
-  .friend-card.profile-open { cursor: pointer; }
-  .dm-user-item-avatar.profile-tap,
-  .dm-user-item-name.profile-tap { cursor: pointer; }
-  .dm-chat-header.profile-open { cursor: pointer; }
-  .dm-chat-header.profile-open:hover { opacity: 0.92; }
+  [data-open-profile] { cursor: pointer; }
+  .friend-card { cursor: default; }
+  .friend-card-banner {
+    height: 52px;
+    background: linear-gradient(135deg, #3d4f9f 0%, #6b3d7a 50%, var(--accent2) 100%);
+    background-size: cover;
+    background-position: center;
+    flex-shrink: 0;
+  }
+  .friend-card-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px 10px;
+  }
+  .friend-card.has-banner .friend-avatar {
+    margin-top: -22px;
+    border: 3px solid var(--bg-mid);
+    width: 44px;
+    height: 44px;
+    font-size: 17px;
+  }
+  .friend-card.has-banner { flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }
+  .friend-card.has-banner .friend-info { padding-top: 0; }
+  .friend-avatar[data-open-profile]:hover,
+  .dm-user-item-avatar[data-open-profile]:hover,
+  .dm-chat-header-avatar[data-open-profile]:hover { opacity: 0.85; }
 
   /* ─── PROFIL UTILISATEUR (popup Discord) ─────────────── */
   .profile-modal-wrap .modal-card {
@@ -1739,9 +1762,9 @@
 <div class="modal profile-modal-wrap" id="profile-modal">
   <div class="modal-card">
     <button type="button" class="profile-close-btn" onclick="closeModal('profile-modal')" aria-label="Fermer">×</button>
-    <div class="profile-banner" id="profile-banner"></div>
+    <div class="profile-banner" id="profile-banner" role="img" aria-label="Bannière du profil"></div>
     <div class="profile-body">
-      <div class="profile-avatar" id="profile-avatar">?</div>
+      <div class="profile-avatar" id="profile-avatar" role="img" aria-label="Photo de profil">?</div>
       <div class="profile-displayname" id="profile-displayname">—</div>
       <div class="profile-username" id="profile-username">@—</div>
       <div class="profile-mutual" id="profile-mutual-box">
@@ -1778,6 +1801,8 @@
     try { return JSON.parse(sessionStorage.getItem('nexus_current') || 'null'); } catch { return null; }
   }
   function setCurrentUser(user) { sessionStorage.setItem('nexus_current', JSON.stringify(user)); }
+
+  let _friendsData = { friends: [], pendingIn: [], pendingOut: [] };
 
   // ─── AVATAR (Supabase Storage + colonne avatar_url) ───
   const AVATAR_BUCKET = 'avatars';
@@ -1957,34 +1982,40 @@
     return n + ' amis en commun';
   }
 
-  async function openUserProfile(userId, e) {
-    if (e) { e.stopPropagation(); e.preventDefault(); }
-    const me = getCurrentUser();
-    if (!me) return;
-    if (userId === me.id) { openSettings(); return; }
+  function safeCssUrl(url) {
+    if (!url) return '';
+    return String(url).replace(/\\/g, '\\\\').replace(/'/g, '%27');
+  }
 
-    let user = (_friendsData?.friends || [])
-      .concat(_friendsData?.pendingIn || [], _friendsData?.pendingOut || [])
+  async function fetchUserForProfile(userId) {
+    const cached = (_friendsData.friends || [])
+      .concat(_friendsData.pendingIn || [], _friendsData.pendingOut || [])
       .find(u => u.id === userId);
+    if (cached && cached.username && cached.displayname) return { ...cached };
 
-    if (!user || !user.banner_url) {
-      const { data } = await db.from('users')
-        .select('id,username,displayname,avatar_url,banner_url')
+    let res = await db.from('users')
+      .select('id,username,displayname,avatar_url,banner_url')
+      .eq('id', userId)
+      .maybeSingle();
+    if (res.error && /banner_url/i.test(res.error.message || '')) {
+      res = await db.from('users')
+        .select('id,username,displayname,avatar_url')
         .eq('id', userId)
         .maybeSingle();
-      if (!data) { showToast('Profil introuvable'); return; }
-      user = data;
     }
+    if (res.error || !res.data) return null;
+    return res.data;
+  }
 
-    _viewingProfileUserId = userId;
-    const letter = user.displayname.charAt(0).toUpperCase();
+  function renderProfileModal(user) {
+    const letter = (user.displayname || '?').charAt(0).toUpperCase();
     const avUrl = getAvatarUrl(user);
     const bannerEl = document.getElementById('profile-banner');
     const avEl = document.getElementById('profile-avatar');
 
     applyBannerToEl(bannerEl, user);
     if (avUrl) {
-      avEl.style.backgroundImage = `url("${avUrl}")`;
+      avEl.style.backgroundImage = `url("${safeCssUrl(avUrl)}")`;
       avEl.classList.add('has-img');
       avEl.textContent = '';
     } else {
@@ -1993,20 +2024,65 @@
       avEl.textContent = letter;
     }
 
-    document.getElementById('profile-displayname').textContent = user.displayname;
-    document.getElementById('profile-username').textContent = '@' + user.username;
+    document.getElementById('profile-displayname').textContent = user.displayname || '—';
+    document.getElementById('profile-username').textContent = '@' + (user.username || '—');
+  }
+
+  async function openUserProfile(userId, e) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    const me = getCurrentUser();
+    if (!me || !userId) return;
+    if (userId === me.id) { openSettings(); return; }
+
+    _viewingProfileUserId = userId;
+    document.getElementById('profile-displayname').textContent = '…';
+    document.getElementById('profile-username').textContent = '@…';
     document.getElementById('profile-mutual-text').textContent = 'Chargement…';
-
-    const isFriend = (_friendsData?.friends || []).some(f => f.id === userId);
     const msgBtn = document.getElementById('profile-msg-btn');
-    if (msgBtn) msgBtn.style.display = isFriend ? 'inline-flex' : 'none';
-
+    if (msgBtn) msgBtn.style.display = 'none';
     showModal('profile-modal');
 
-    countMutualFriends(userId).then(n => {
+    try {
+      const user = await fetchUserForProfile(userId);
+      if (!user) {
+        closeModal('profile-modal');
+        showToast('Profil introuvable');
+        return;
+      }
+      renderProfileModal(user);
+
+      const isFriend = (_friendsData.friends || []).some(f => f.id === userId);
+      if (msgBtn) msgBtn.style.display = isFriend ? 'inline-flex' : 'none';
+
+      const n = await countMutualFriends(userId);
       if (_viewingProfileUserId === userId) {
         document.getElementById('profile-mutual-text').textContent = mutualFriendsLabel(n);
       }
+    } catch (err) {
+      console.error('openUserProfile', err);
+      closeModal('profile-modal');
+      showToast('Impossible d\'ouvrir le profil');
+    }
+  }
+
+  function initProfileClickDelegation() {
+    document.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-open-profile]');
+      if (!el) return;
+      const userId = el.getAttribute('data-open-profile');
+      if (!userId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      openUserProfile(userId);
+    }, true);
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const el = e.target.closest('[data-open-profile]');
+      if (!el) return;
+      e.preventDefault();
+      openUserProfile(el.getAttribute('data-open-profile'));
     });
   }
 
@@ -2602,6 +2678,7 @@
 
   initOTPInputs('verify-otp-container');
   initOTPInputs('forgot-otp-container');
+  initProfileClickDelegation();
 
   const existingUser=getCurrentUser();
   if (existingUser) { document.getElementById('auth-overlay').style.display='none'; loadApp(existingUser); }
@@ -2614,7 +2691,6 @@
   // ─── FRIEND SYSTEM ────────────────────────────────────
   // ══════════════════════════════════════════════════════
 
-  let _friendsData = { friends: [], pendingIn: [], pendingOut: [] };
   let _dmConversations = {}; // friendId -> [{sender_id, content, created_at}]
   let _activeDmFriendId = null;
   let _msgPollingInterval = null;
@@ -2704,41 +2780,64 @@
   function friendAvatarHtml(f) {
     const url = getAvatarUrl(f);
     const letter = f.displayname.charAt(0).toUpperCase();
+    const uid = escapeHtml(f.id);
     if (url) {
-      return `<div class="friend-avatar has-img" style="background-image:url('${url.replace(/'/g, '%27')}')"></div>`;
+      return `<div class="friend-avatar has-img" data-open-profile="${uid}" role="button" tabindex="0" title="Voir le profil" style="background-image:url('${safeCssUrl(url)}')"></div>`;
     }
-    return `<div class="friend-avatar">${letter}</div>`;
+    return `<div class="friend-avatar" data-open-profile="${uid}" role="button" tabindex="0" title="Voir le profil">${letter}</div>`;
+  }
+
+  function friendBannerHtml(f) {
+    const url = getBannerUrl(f);
+    const uid = escapeHtml(f.id);
+    const style = url ? ` style="background-image:url('${safeCssUrl(url)}')"` : '';
+    return `<div class="friend-card-banner"${style}></div>`;
   }
 
   function friendCard(f, type) {
     let actions = '';
     if (type === 'incoming') {
       actions = `
-        <button class="friend-btn accept" title="Accepter" onclick="handleAcceptFriend('${f.id}')">
+        <button class="friend-btn accept" title="Accepter" onclick="event.stopPropagation();handleAcceptFriend('${f.id}')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
         </button>
-        <button class="friend-btn decline" title="Refuser" onclick="handleDeclineFriend('${f.id}')">
+        <button class="friend-btn decline" title="Refuser" onclick="event.stopPropagation();handleDeclineFriend('${f.id}')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>`;
     } else if (type === 'outgoing') {
       actions = `<span class="pending-direction">En attente…</span>
-        <button class="friend-btn decline" title="Annuler" onclick="handleCancelFriend('${f.id}')">
+        <button class="friend-btn decline" title="Annuler" onclick="event.stopPropagation();handleCancelFriend('${f.id}')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>`;
     } else {
       actions = `
-        <button class="friend-btn msg" title="Envoyer un message" onclick="openDmWith('${f.id}')">
+        <button class="friend-btn msg" title="Envoyer un message" onclick="event.stopPropagation();openDmWith('${f.id}')">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
         </button>`;
     }
     const label = type === 'incoming' ? '→ Demande reçue' : type === 'outgoing' ? '← Demande envoyée' : '';
-    return `<div class="friend-card profile-open" onclick="openUserProfile('${f.id}', event)">
+    const hasBanner = !!getBannerUrl(f);
+    const uid = escapeHtml(f.id);
+    if (hasBanner) {
+      return `<div class="friend-card has-banner">
+        ${friendBannerHtml(f)}
+        <div class="friend-card-inner">
+          ${friendAvatarHtml(f)}
+          <div class="friend-info">
+            <div class="friend-name">${escapeHtml(f.displayname)}${label ? ` <span style="font-size:11px;color:var(--text-muted);font-weight:400">${label}</span>` : ''}</div>
+            <div class="friend-tag">@${escapeHtml(f.username)}</div>
+          </div>
+          <div class="friend-actions">${actions}</div>
+        </div>
+      </div>`;
+    }
+    return `<div class="friend-card">
       ${friendAvatarHtml(f)}
       <div class="friend-info">
         <div class="friend-name">${escapeHtml(f.displayname)}${label ? ` <span style="font-size:11px;color:var(--text-muted);font-weight:400">${label}</span>` : ''}</div>
         <div class="friend-tag">@${escapeHtml(f.username)}</div>
       </div>
-      <div class="friend-actions" onclick="event.stopPropagation()">${actions}</div>
+      <div class="friend-actions">${actions}</div>
     </div>`;
   }
 
@@ -2758,8 +2857,8 @@
       const avContent = url ? '' : letter;
       return `
       <div class="dm-user-item${_activeDmFriendId === f.id ? ' active' : ''}" onclick="openDmWith('${f.id}')" id="dm-item-${f.id}">
-        <div class="${avClass} profile-tap"${avStyle} onclick="openUserProfile('${f.id}', event)">${avContent}</div>
-        <span class="dm-user-item-name profile-tap" onclick="openUserProfile('${f.id}', event)">${escapeHtml(f.displayname)}</span>
+        <div class="${avClass}" data-open-profile="${escapeHtml(f.id)}" role="button" tabindex="0" title="Voir le profil"${avStyle}>${avContent}</div>
+        <span class="dm-user-item-name">${escapeHtml(f.displayname)}</span>
       </div>`;
     }).join('');
   }
@@ -2788,8 +2887,8 @@
     const fAvStyle = fUrl ? ` style="background-image:url('${fUrl.replace(/'/g, '%27')}')"` : '';
     const fAvClass = 'dm-chat-header-avatar' + (fUrl ? ' has-img' : '');
     document.getElementById('main-topbar').innerHTML = `
-      <div class="topbar-left dm-chat-header profile-open" onclick="openUserProfile('${friend.id}')" title="Voir le profil">
-        <div class="${fAvClass}"${fAvStyle}>${fUrl ? '' : fLetter}</div>
+      <div class="topbar-left dm-chat-header">
+        <div class="${fAvClass}" data-open-profile="${escapeHtml(friend.id)}" role="button" tabindex="0" title="Voir le profil"${fAvStyle}>${fUrl ? '' : fLetter}</div>
         <span class="topbar-title">${escapeHtml(friend.displayname)}</span>
         <span style="font-size:12px;color:var(--text-muted)">@${escapeHtml(friend.username)}</span>
       </div>
