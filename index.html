@@ -1084,6 +1084,156 @@
     border-top: 1px solid var(--border);
   }
 
+  .settings-profile-preview {
+    position: relative;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    margin-bottom: 40px;
+    background: var(--bg-mid);
+  }
+  .settings-banner-preview {
+    height: 100px;
+    background: linear-gradient(135deg, #3d4f9f 0%, #6b3d7a 50%, var(--accent2) 100%);
+    background-size: cover;
+    background-position: center;
+  }
+  .settings-banner-actions {
+    padding: 10px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    border-top: 1px solid var(--border);
+    background: var(--bg-deep);
+  }
+  .settings-avatar-on-banner {
+    position: absolute;
+    left: 16px;
+    bottom: -28px;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 5px solid var(--bg-deep);
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: #fff;
+    overflow: hidden;
+  }
+  .settings-avatar-on-banner.has-img { color: transparent; }
+
+  .friend-card.profile-open { cursor: pointer; }
+  .dm-user-item-avatar.profile-tap,
+  .dm-user-item-name.profile-tap { cursor: pointer; }
+  .dm-chat-header.profile-open { cursor: pointer; }
+  .dm-chat-header.profile-open:hover { opacity: 0.92; }
+
+  /* ─── PROFIL UTILISATEUR (popup Discord) ─────────────── */
+  .profile-modal-wrap .modal-card {
+    width: 420px;
+    max-width: 95vw;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 16px;
+  }
+  .profile-banner {
+    height: 118px;
+    background: linear-gradient(135deg, #3d4f9f 0%, #6b3d7a 50%, var(--accent2) 100%);
+    background-size: cover;
+    background-position: center;
+  }
+  .profile-body {
+    padding: 52px 20px 20px;
+    position: relative;
+    background: var(--bg-deep);
+  }
+  .profile-avatar {
+    position: absolute;
+    top: -42px;
+    left: 20px;
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    border: 6px solid var(--bg-deep);
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    background-size: cover;
+    background-position: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-size: 32px;
+    font-weight: 700;
+    color: #fff;
+    overflow: hidden;
+  }
+  .profile-avatar.has-img { color: transparent; }
+  .profile-displayname {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .profile-username {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+  }
+  .profile-mutual {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-mid);
+    border-radius: var(--radius-xs);
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+  .profile-mutual-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .profile-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .profile-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(0,0,0,0.45);
+    color: #fff;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .profile-close-btn:hover { background: rgba(0,0,0,0.65); }
+
   /* ─── TOAST NOTIFICATION ─────────────────────────────── */
   #nexus-toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -1545,18 +1695,24 @@
     <div class="global-error" id="settings-error"></div>
     <div class="global-success" id="settings-success"></div>
 
-    <div class="settings-section-title">Photo de profil</div>
-    <div class="settings-avatar-row">
-      <div class="settings-avatar-preview" id="settings-avatar-preview">?</div>
-      <div class="settings-avatar-actions">
+    <div class="settings-section-title">Profil public</div>
+    <div class="settings-profile-preview">
+      <div class="settings-banner-preview" id="settings-banner-preview"></div>
+      <div class="settings-avatar-on-banner" id="settings-avatar-preview">?</div>
+      <div class="settings-banner-actions">
         <label class="btn-upload">
-          Changer la photo
+          Bannière
+          <input type="file" id="settings-banner-input" accept="image/png" onchange="handleBannerFileSelect(event)">
+        </label>
+        <button type="button" class="btn-remove-avatar" id="settings-remove-banner" onclick="removeBannerPreview()" style="display:none">Retirer bannière</button>
+        <label class="btn-upload" style="background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border-strong)">
+          Avatar
           <input type="file" id="settings-avatar-input" accept="image/png" onchange="handleAvatarFileSelect(event)">
         </label>
-        <button type="button" class="btn-remove-avatar" id="settings-remove-avatar" onclick="removeAvatarPreview()" style="display:none">Supprimer la photo</button>
-        <p class="settings-avatar-hint">Fichier PNG uniquement. Carré recommandé (256×256).</p>
+        <button type="button" class="btn-remove-avatar" id="settings-remove-avatar" onclick="removeAvatarPreview()" style="display:none">Retirer avatar</button>
       </div>
     </div>
+    <p class="settings-avatar-hint" style="margin:-28px 0 16px">PNG recommandé — bannière 600×240, avatar 256×256.</p>
 
     <div class="settings-section-title">Profil</div>
     <div class="form-group">
@@ -1575,6 +1731,29 @@
     <div class="settings-actions">
       <button class="btn-ghost" onclick="closeModal('settings-modal')">Annuler</button>
       <button class="btn-primary" id="settings-save-btn" style="width:auto;margin-top:0;padding:10px 24px" onclick="handleSaveProfile()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profil utilisateur -->
+<div class="modal profile-modal-wrap" id="profile-modal">
+  <div class="modal-card">
+    <button type="button" class="profile-close-btn" onclick="closeModal('profile-modal')" aria-label="Fermer">×</button>
+    <div class="profile-banner" id="profile-banner"></div>
+    <div class="profile-body">
+      <div class="profile-avatar" id="profile-avatar">?</div>
+      <div class="profile-displayname" id="profile-displayname">—</div>
+      <div class="profile-username" id="profile-username">@—</div>
+      <div class="profile-mutual" id="profile-mutual-box">
+        <div class="profile-mutual-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+        </div>
+        <span id="profile-mutual-text">Chargement…</span>
+      </div>
+      <div class="profile-actions" id="profile-actions">
+        <button class="btn-primary" id="profile-msg-btn" style="width:auto;margin:0;padding:10px 20px" onclick="openDmFromProfile()">Envoyer un message</button>
+        <button class="btn-ghost" onclick="closeModal('profile-modal')">Fermer</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1643,6 +1822,201 @@
     await db.storage.from(AVATAR_BUCKET).remove([avatarStoragePath(userId)]);
   }
 
+  // ─── BANNIÈRE ─────────────────────────────────────────
+  const BANNER_BUCKET = 'banners';
+  let _pendingBannerFile = null;
+  let _pendingBannerDataUrl = null;
+  let _pendingBannerRemove = false;
+  let _viewingProfileUserId = null;
+
+  function getBannerUrl(userOrId) {
+    if (!userOrId) return null;
+    if (typeof userOrId === 'object') {
+      if (userOrId.banner_url) return userOrId.banner_url;
+      userOrId = userOrId.id;
+    }
+    if (!userOrId) return null;
+    const cur = getCurrentUser();
+    if (cur && cur.id === userOrId && cur.banner_url) return cur.banner_url;
+    const lists = [
+      ...(_friendsData?.friends || []),
+      ...(_friendsData?.pendingIn || []),
+      ...(_friendsData?.pendingOut || [])
+    ];
+    const found = lists.find(x => x.id === userOrId);
+    if (found && found.banner_url) return found.banner_url;
+    return null;
+  }
+
+  function bannerStoragePath(userId) { return userId + '/banner.png'; }
+
+  async function uploadBannerToStorage(userId, file) {
+    const path = bannerStoragePath(userId);
+    const { error } = await db.storage.from(BANNER_BUCKET).upload(path, file, {
+      upsert: true,
+      contentType: 'image/png',
+      cacheControl: '3600'
+    });
+    if (error) throw error;
+    const { data } = db.storage.from(BANNER_BUCKET).getPublicUrl(path);
+    return data.publicUrl + '?t=' + Date.now();
+  }
+
+  async function removeBannerFromStorage(userId) {
+    await db.storage.from(BANNER_BUCKET).remove([bannerStoragePath(userId)]);
+  }
+
+  function applyBannerToEl(el, userOrId) {
+    if (!el) return;
+    const url = getBannerUrl(userOrId);
+    if (url) {
+      el.style.backgroundImage = `url("${url}")`;
+    } else {
+      el.style.backgroundImage = '';
+    }
+  }
+
+  function updateSettingsProfilePreview(u) {
+    const bannerEl = document.getElementById('settings-banner-preview');
+    if (bannerEl) {
+      if (_pendingBannerRemove) bannerEl.style.backgroundImage = '';
+      else if (_pendingBannerDataUrl) bannerEl.style.backgroundImage = `url("${_pendingBannerDataUrl}")`;
+      else applyBannerToEl(bannerEl, u);
+    }
+    const avEl = document.getElementById('settings-avatar-preview');
+    if (avEl) {
+      if (_pendingAvatarDataUrl) {
+        avEl.style.backgroundImage = `url("${_pendingAvatarDataUrl}")`;
+        avEl.classList.add('has-img');
+        avEl.textContent = '';
+      } else {
+        applyAvatarToEl(avEl, u, u.displayname);
+      }
+    }
+    const hasBanner = !_pendingBannerRemove && !!(_pendingBannerDataUrl || getBannerUrl(u));
+    const hasAvatar = !_pendingAvatarRemove && !!(_pendingAvatarDataUrl || getAvatarUrl(u));
+    const rb = document.getElementById('settings-remove-banner');
+    const ra = document.getElementById('settings-remove-avatar');
+    if (rb) rb.style.display = hasBanner ? 'block' : 'none';
+    if (ra) ra.style.display = hasAvatar ? 'block' : 'none';
+  }
+
+  function handleBannerFileSelect(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    hideEl('settings-error');
+    if (file.type !== 'image/png') {
+      showError('settings-error', 'Bannière : PNG uniquement.');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      _pendingBannerFile = file;
+      _pendingBannerDataUrl = reader.result;
+      _pendingBannerRemove = false;
+      const bannerEl = document.getElementById('settings-banner-preview');
+      if (bannerEl) bannerEl.style.backgroundImage = `url("${_pendingBannerDataUrl}")`;
+      document.getElementById('settings-remove-banner').style.display = 'block';
+    };
+    reader.onerror = () => showError('settings-error', 'Impossible de lire la bannière.');
+    reader.readAsDataURL(file);
+  }
+
+  function removeBannerPreview() {
+    _pendingBannerFile = null;
+    _pendingBannerDataUrl = null;
+    _pendingBannerRemove = true;
+    document.getElementById('settings-banner-input').value = '';
+    updateSettingsProfilePreview(getCurrentUser());
+  }
+
+  function getMyFriendIds() {
+    return new Set((_friendsData?.friends || []).map(f => f.id));
+  }
+
+  async function countMutualFriends(otherUserId) {
+    const me = getCurrentUser();
+    if (!me || !otherUserId || otherUserId === me.id) return 0;
+    const myFriends = getMyFriendIds();
+    if (!myFriends.size) return 0;
+    const { data: fr } = await db.from('friendships').select('user_id, friend_id')
+      .or(`user_id.eq.${otherUserId},friend_id.eq.${otherUserId}`)
+      .eq('status', 'accepted');
+    const theirFriends = new Set((fr || []).map(r =>
+      r.user_id === otherUserId ? r.friend_id : r.user_id
+    ));
+    let n = 0;
+    myFriends.forEach(id => { if (theirFriends.has(id)) n++; });
+    return n;
+  }
+
+  function mutualFriendsLabel(n) {
+    if (n === 0) return 'Aucun ami en commun';
+    if (n === 1) return '1 ami en commun';
+    return n + ' amis en commun';
+  }
+
+  async function openUserProfile(userId, e) {
+    if (e) { e.stopPropagation(); e.preventDefault(); }
+    const me = getCurrentUser();
+    if (!me) return;
+    if (userId === me.id) { openSettings(); return; }
+
+    let user = (_friendsData?.friends || [])
+      .concat(_friendsData?.pendingIn || [], _friendsData?.pendingOut || [])
+      .find(u => u.id === userId);
+
+    if (!user || !user.banner_url) {
+      const { data } = await db.from('users')
+        .select('id,username,displayname,avatar_url,banner_url')
+        .eq('id', userId)
+        .maybeSingle();
+      if (!data) { showToast('Profil introuvable'); return; }
+      user = data;
+    }
+
+    _viewingProfileUserId = userId;
+    const letter = user.displayname.charAt(0).toUpperCase();
+    const avUrl = getAvatarUrl(user);
+    const bannerEl = document.getElementById('profile-banner');
+    const avEl = document.getElementById('profile-avatar');
+
+    applyBannerToEl(bannerEl, user);
+    if (avUrl) {
+      avEl.style.backgroundImage = `url("${avUrl}")`;
+      avEl.classList.add('has-img');
+      avEl.textContent = '';
+    } else {
+      avEl.style.backgroundImage = '';
+      avEl.classList.remove('has-img');
+      avEl.textContent = letter;
+    }
+
+    document.getElementById('profile-displayname').textContent = user.displayname;
+    document.getElementById('profile-username').textContent = '@' + user.username;
+    document.getElementById('profile-mutual-text').textContent = 'Chargement…';
+
+    const isFriend = (_friendsData?.friends || []).some(f => f.id === userId);
+    const msgBtn = document.getElementById('profile-msg-btn');
+    if (msgBtn) msgBtn.style.display = isFriend ? 'inline-flex' : 'none';
+
+    showModal('profile-modal');
+
+    countMutualFriends(userId).then(n => {
+      if (_viewingProfileUserId === userId) {
+        document.getElementById('profile-mutual-text').textContent = mutualFriendsLabel(n);
+      }
+    });
+  }
+
+  function openDmFromProfile() {
+    if (!_viewingProfileUserId) return;
+    const id = _viewingProfileUserId;
+    closeModal('profile-modal');
+    openDmWith(id);
+  }
+
   function applyAvatarToEl(el, userOrId, displayname) {
     if (!el) return;
     const url = getAvatarUrl(userOrId);
@@ -1699,6 +2073,9 @@
     _pendingAvatarDataUrl = null;
     _pendingAvatarFile = null;
     _pendingAvatarRemove = false;
+    _pendingBannerFile = null;
+    _pendingBannerDataUrl = null;
+    _pendingBannerRemove = false;
     document.getElementById('settings-displayname').value = u.displayname;
     document.getElementById('settings-username').value = u.username;
     document.getElementById('settings-avatar-input').value = '';
@@ -1711,10 +2088,9 @@
     });
     hideEl('settings-error');
     hideEl('settings-success');
-    const preview = document.getElementById('settings-avatar-preview');
-    applyAvatarToEl(preview, u, u.displayname);
-    const hasAvatar = !!getAvatarUrl(u);
-    document.getElementById('settings-remove-avatar').style.display = hasAvatar ? 'block' : 'none';
+    document.getElementById('settings-banner-input').value = '';
+    document.getElementById('settings-avatar-input').value = '';
+    updateSettingsProfilePreview(u);
     showModal('settings-modal');
   }
 
@@ -1737,6 +2113,7 @@
       preview.classList.add('has-img');
       preview.textContent = '';
       document.getElementById('settings-remove-avatar').style.display = 'block';
+      updateSettingsProfilePreview(getCurrentUser());
     };
     reader.onerror = () => showError('settings-error', 'Impossible de lire le fichier.');
     reader.readAsDataURL(file);
@@ -1749,9 +2126,10 @@
     document.getElementById('settings-avatar-input').value = '';
     const u = getCurrentUser();
     const preview = document.getElementById('settings-avatar-preview');
-    if (u) applyAvatarToEl(preview, null, u.displayname);
+    if (u) applyAvatarToEl(preview, u, u.displayname);
     else { preview.style.backgroundImage = ''; preview.classList.remove('has-img'); preview.textContent = '?'; }
     document.getElementById('settings-remove-avatar').style.display = 'none';
+    updateSettingsProfilePreview(u);
   }
 
   async function handleSaveProfile() {
@@ -1820,6 +2198,7 @@
     }
 
     let avatar_url = u.avatar_url || null;
+    let banner_url = u.banner_url || null;
 
     try {
       if (_pendingAvatarRemove) {
@@ -1829,9 +2208,15 @@
       } else if (_pendingAvatarFile) {
         avatar_url = await uploadAvatarToStorage(u.id, _pendingAvatarFile);
       }
+      if (_pendingBannerRemove) {
+        banner_url = null;
+        try { await removeBannerFromStorage(u.id); } catch (_) {}
+      } else if (_pendingBannerFile) {
+        banner_url = await uploadBannerToStorage(u.id, _pendingBannerFile);
+      }
     } catch (avErr) {
       setButtonLoading(btn, false);
-      showError('settings-error', 'Erreur photo : ' + (avErr.message || avErr));
+      showError('settings-error', 'Erreur image : ' + (avErr.message || avErr));
       return;
     }
 
@@ -1839,7 +2224,8 @@
       username,
       username_lower: username.toLowerCase(),
       displayname,
-      avatar_url
+      avatar_url,
+      banner_url
     }).eq('id', u.id).select().single();
 
     setButtonLoading(btn, false);
@@ -1854,6 +2240,9 @@
     _pendingAvatarDataUrl = null;
     _pendingAvatarFile = null;
     _pendingAvatarRemove = false;
+    _pendingBannerFile = null;
+    _pendingBannerDataUrl = null;
+    _pendingBannerRemove = false;
 
     updateProfileUI(newUser);
     showError('settings-success', '✓ Profil mis à jour !');
@@ -2251,7 +2640,7 @@
     const allIds = [...new Set([...friendIds, ...pendingInIds, ...pendingOutIds])];
     let usersMap = {};
     if (allIds.length) {
-      const { data: usersArr } = await db.from('users').select('id,username,displayname,avatar_url').in('id', allIds);
+      const { data: usersArr } = await db.from('users').select('id,username,displayname,avatar_url,banner_url').in('id', allIds);
       (usersArr||[]).forEach(u => usersMap[u.id] = u);
     }
     _friendsData = {
@@ -2343,13 +2732,13 @@
         </button>`;
     }
     const label = type === 'incoming' ? '→ Demande reçue' : type === 'outgoing' ? '← Demande envoyée' : '';
-    return `<div class="friend-card">
+    return `<div class="friend-card profile-open" onclick="openUserProfile('${f.id}', event)">
       ${friendAvatarHtml(f)}
       <div class="friend-info">
-        <div class="friend-name">${f.displayname}${label ? ` <span style="font-size:11px;color:var(--text-muted);font-weight:400">${label}</span>` : ''}</div>
-        <div class="friend-tag">@${f.username}</div>
+        <div class="friend-name">${escapeHtml(f.displayname)}${label ? ` <span style="font-size:11px;color:var(--text-muted);font-weight:400">${label}</span>` : ''}</div>
+        <div class="friend-tag">@${escapeHtml(f.username)}</div>
       </div>
-      <div class="friend-actions">${actions}</div>
+      <div class="friend-actions" onclick="event.stopPropagation()">${actions}</div>
     </div>`;
   }
 
@@ -2369,8 +2758,8 @@
       const avContent = url ? '' : letter;
       return `
       <div class="dm-user-item${_activeDmFriendId === f.id ? ' active' : ''}" onclick="openDmWith('${f.id}')" id="dm-item-${f.id}">
-        <div class="${avClass}"${avStyle}>${avContent}</div>
-        <span class="dm-user-item-name">${escapeHtml(f.displayname)}</span>
+        <div class="${avClass} profile-tap"${avStyle} onclick="openUserProfile('${f.id}', event)">${avContent}</div>
+        <span class="dm-user-item-name profile-tap" onclick="openUserProfile('${f.id}', event)">${escapeHtml(f.displayname)}</span>
       </div>`;
     }).join('');
   }
@@ -2399,7 +2788,7 @@
     const fAvStyle = fUrl ? ` style="background-image:url('${fUrl.replace(/'/g, '%27')}')"` : '';
     const fAvClass = 'dm-chat-header-avatar' + (fUrl ? ' has-img' : '');
     document.getElementById('main-topbar').innerHTML = `
-      <div class="topbar-left dm-chat-header">
+      <div class="topbar-left dm-chat-header profile-open" onclick="openUserProfile('${friend.id}')" title="Voir le profil">
         <div class="${fAvClass}"${fAvStyle}>${fUrl ? '' : fLetter}</div>
         <span class="topbar-title">${escapeHtml(friend.displayname)}</span>
         <span style="font-size:12px;color:var(--text-muted)">@${escapeHtml(friend.username)}</span>
@@ -2519,7 +2908,7 @@
     if (!username) { showError('add-friend-error',"Saisis un nom d'utilisateur."); return; }
     if (username.toLowerCase() === u.username.toLowerCase()) { showError('add-friend-error',"Tu ne peux pas t'ajouter toi-même."); return; }
 
-    const { data: target } = await db.from('users').select('id,username,displayname,avatar_url').eq('username_lower', username.toLowerCase()).maybeSingle();
+    const { data: target } = await db.from('users').select('id,username,displayname,avatar_url,banner_url').eq('username_lower', username.toLowerCase()).maybeSingle();
     if (!target) { showError('add-friend-error',"Aucun utilisateur trouvé avec ce pseudo."); return; }
 
     // Check existing
