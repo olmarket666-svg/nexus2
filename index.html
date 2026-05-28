@@ -1549,6 +1549,8 @@
   }
   .voice-ctrl-btn.hangup:hover { background: #ef4444; }
   .topbar-icon-btn.call-start:hover { color: var(--success); }
+  .topbar-icon-btn.voice-settings-btn:hover { color: var(--accent); }
+  .dm-chat-header { flex: 1; min-width: 0; }
 </style>
 </head>
 <body>
@@ -2103,6 +2105,7 @@
       </div>
       <div class="profile-actions" id="profile-actions">
         <button class="btn-primary" id="profile-msg-btn" style="width:auto;margin:0;padding:10px 20px" onclick="openDmFromProfile()">Envoyer un message</button>
+        <button class="btn-ghost" id="profile-call-btn" style="display:none" onclick="startVoiceCallFromProfile()">📞 Appeler</button>
         <button class="btn-ghost" onclick="closeModal('profile-modal')">Fermer</button>
       </div>
     </div>
@@ -2424,7 +2427,9 @@
     document.getElementById('profile-username').textContent = '@…';
     document.getElementById('profile-mutual-text').textContent = 'Chargement…';
     const msgBtn = document.getElementById('profile-msg-btn');
+    const callBtn = document.getElementById('profile-call-btn');
     if (msgBtn) msgBtn.style.display = 'none';
+    if (callBtn) callBtn.style.display = 'none';
     showModal('profile-modal');
 
     try {
@@ -2438,6 +2443,7 @@
 
       const isFriend = (_friendsData.friends || []).some(f => f.id === userId);
       if (msgBtn) msgBtn.style.display = isFriend ? 'inline-flex' : 'none';
+      if (callBtn) callBtn.style.display = isFriend ? 'inline-flex' : 'none';
 
       const n = await countMutualFriends(userId);
       if (_viewingProfileUserId === userId) {
@@ -2705,12 +2711,35 @@
     tick();
   }
 
-  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
-    navigator.mediaDevices.addEventListener('devicechange', () => {
-      if (document.getElementById('settings-panel-voice')?.classList.contains('active')) {
-        refreshVoiceDeviceLists();
-      }
-    });
+  function openVoiceSettings() {
+    openSettings();
+    switchSettingsTab('voice');
+  }
+
+  function buildDmTopbarHtml(friend) {
+    const id = friend.id.replace(/'/g, "\\'");
+    const fUrl = getAvatarUrl(friend);
+    const fLetter = friend.displayname.charAt(0).toUpperCase();
+    const fAvStyle = fUrl ? ` style="background-image:url('${fUrl.replace(/'/g, '%27')}')"` : '';
+    const fAvClass = 'dm-chat-header-avatar' + (fUrl ? ' has-img' : '');
+    return `
+      <div class="topbar-left dm-chat-header">
+        <div class="${fAvClass} profile-avatar-btn" onclick="onAvatarProfileClick(event,'${id}')" role="button" title="Voir le profil"${fAvStyle}>${fUrl ? '' : fLetter}</div>
+        <span class="topbar-title" style="cursor:default">${escapeHtml(friend.displayname)}</span>
+        <span style="font-size:12px;color:var(--text-muted);cursor:default">@${escapeHtml(friend.username)}</span>
+      </div>
+      <div class="topbar-actions" style="margin-left:auto">
+        <button type="button" class="topbar-icon-btn call-start" title="Appeler" onclick="startVoiceCall('${id}')">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </button>
+        <button type="button" class="topbar-icon-btn voice-settings-btn" title="Paramètres vocaux" onclick="openVoiceSettings()">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.05-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59-.24-1.13-.56-1.62-.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.03-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+        </button>
+        <div class="topbar-divider"></div>
+        <button type="button" class="topbar-icon-btn" title="Retour aux amis" onclick="backToFriends()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        </button>
+      </div>`;
   }
 
   function handleAvatarFileSelect(e) {
@@ -3430,21 +3459,7 @@
     document.getElementById('dm-chat-view').style.overflow='hidden';
 
     // Update topbar
-    const fUrl = getAvatarUrl(friend);
-    const fLetter = friend.displayname.charAt(0).toUpperCase();
-    const fAvStyle = fUrl ? ` style="background-image:url('${fUrl.replace(/'/g, '%27')}')"` : '';
-    const fAvClass = 'dm-chat-header-avatar' + (fUrl ? ' has-img' : '');
-    document.getElementById('main-topbar').innerHTML = `
-      <div class="topbar-left dm-chat-header">
-        <div class="${fAvClass} profile-avatar-btn" onclick="onAvatarProfileClick(event,'${friend.id.replace(/'/g, "\\'")}')" role="button" title="Voir le profil"${fAvStyle}>${fUrl ? '' : fLetter}</div>
-        <span class="topbar-title" style="cursor:default">${escapeHtml(friend.displayname)}</span>
-        <span style="font-size:12px;color:var(--text-muted);cursor:default">@${escapeHtml(friend.username)}</span>
-      </div>
-      <div class="topbar-actions" style="margin-left:auto">
-        <button class="topbar-icon-btn" title="Retour aux amis" onclick="backToFriends()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-        </button>
-      </div>`;
+    document.getElementById('main-topbar').innerHTML = buildDmTopbarHtml(friend);
 
     // Update DM input placeholder
     document.getElementById('dm-chat-input').placeholder = `Écrire à ${friend.displayname}…`;
@@ -3609,10 +3624,18 @@
   const _origLoadApp = loadApp;
   loadApp = function(user) {
     _origLoadApp(user);
+    initCallInbox();
     setTimeout(() => {
       loadFriendState();
       _friendsPollingInterval = setInterval(loadFriendState, 8000);
     }, 400);
+  };
+
+  const _origHandleLogout = handleLogout;
+  handleLogout = function() {
+    endCall('logout');
+    if (_call.inboxChannel) { db.removeChannel(_call.inboxChannel); _call.inboxChannel = null; }
+    _origHandleLogout();
   };
 
   // ── Enter key in chat input ────────────────────────────
@@ -3624,6 +3647,327 @@
   document.getElementById('add-friend-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') handleSendFriendRequest();
   });
+
+  // ══════════════════════════════════════════════════════
+  // ─── APPELS VOCAUX (WebRTC + Supabase Realtime) ───────
+  // ══════════════════════════════════════════════════════
+
+  const _call = {
+    state: 'idle',
+    callId: null,
+    peerId: null,
+    peer: null,
+    channel: null,
+    inboxChannel: null,
+    pc: null,
+    localStream: null,
+    muted: false,
+    deafened: false,
+    timerIv: null,
+    ringTimeout: null,
+    isCaller: false,
+    startedAt: null
+  };
+
+  function genCallId() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+    });
+  }
+
+  function initCallInbox() {
+    const u = getCurrentUser();
+    if (!u || _call.inboxChannel) return;
+    _call.inboxChannel = db.channel('inbox:' + u.id, { config: { broadcast: { self: false } } });
+    _call.inboxChannel.on('broadcast', { event: 'call-signal' }, ({ payload }) => handleCallSignal(payload));
+    _call.inboxChannel.subscribe();
+  }
+
+  async function sendCallToPeer(peerId, payload) {
+    const ch = db.channel('inbox:' + peerId, { config: { broadcast: { self: false } } });
+    await new Promise(resolve => {
+      ch.subscribe(status => { if (status === 'SUBSCRIBED') resolve(); });
+    });
+    await ch.send({ type: 'broadcast', event: 'call-signal', payload });
+    setTimeout(() => db.removeChannel(ch), 500);
+  }
+
+  function setCallOverlayUser(user) {
+    const av = document.getElementById('call-overlay-avatar');
+    if (!av || !user) return;
+    const letter = (user.displayname || '?').charAt(0).toUpperCase();
+    const url = getAvatarUrl(user);
+    if (url) {
+      av.style.backgroundImage = `url("${safeCssUrl(url)}")`;
+      av.classList.add('has-img');
+      av.textContent = '';
+    } else {
+      av.style.backgroundImage = '';
+      av.classList.remove('has-img');
+      av.textContent = letter;
+    }
+    const nameEl = document.getElementById('call-overlay-name');
+    if (nameEl) nameEl.textContent = user.displayname || 'Utilisateur';
+  }
+
+  function showCallOverlay(mode) {
+    document.getElementById('call-overlay-incoming').style.display = mode === 'incoming' ? 'flex' : 'none';
+    document.getElementById('call-overlay-outgoing').style.display = mode === 'outgoing' ? 'flex' : 'none';
+    const ring = document.getElementById('call-ring');
+    if (ring) ring.style.display = mode === 'connected' ? 'none' : 'block';
+    document.getElementById('call-overlay').classList.add('open');
+  }
+
+  function hideCallOverlay() {
+    document.getElementById('call-overlay').classList.remove('open');
+  }
+
+  function showVoiceBar() {
+    hideCallOverlay();
+    const bar = document.getElementById('voice-bar');
+    const info = document.getElementById('voice-bar-info');
+    if (info && _call.peer) info.innerHTML = 'avec <strong>' + escapeHtml(_call.peer.displayname) + '</strong>';
+    if (bar) bar.classList.add('visible');
+    _call.startedAt = Date.now();
+    if (_call.timerIv) clearInterval(_call.timerIv);
+    _call.timerIv = setInterval(updateCallTimer, 1000);
+    updateCallTimer();
+  }
+
+  function hideVoiceBar() {
+    document.getElementById('voice-bar')?.classList.remove('visible');
+    if (_call.timerIv) { clearInterval(_call.timerIv); _call.timerIv = null; }
+    const t = document.getElementById('voice-bar-timer');
+    if (t) t.textContent = '00:00';
+  }
+
+  function updateCallTimer() {
+    if (!_call.startedAt) return;
+    const s = Math.floor((Date.now() - _call.startedAt) / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    const el = document.getElementById('voice-bar-timer');
+    if (el) el.textContent = String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  }
+
+  async function joinCallChannel(callId) {
+    if (_call.channel) db.removeChannel(_call.channel);
+    _call.channel = db.channel('call:' + callId, { config: { broadcast: { self: false } } });
+    _call.channel.on('broadcast', { event: 'rtc' }, ({ payload }) => handleCallSignal(payload));
+    await new Promise(resolve => {
+      _call.channel.subscribe(status => { if (status === 'SUBSCRIBED') resolve(); });
+    });
+  }
+
+  function broadcastRtc(payload) {
+    if (_call.channel) _call.channel.send({ type: 'broadcast', event: 'rtc', payload });
+  }
+
+  async function startVoiceCall(peerId) {
+    const me = getCurrentUser();
+    if (!me) return;
+    if (_call.state !== 'idle') { showToast('Déjà en appel'); return; }
+    const friend = _friendsData.friends.find(f => f.id === peerId);
+    if (!friend) { showToast('Ami introuvable'); return; }
+
+    _call.state = 'calling';
+    _call.callId = genCallId();
+    _call.peerId = peerId;
+    _call.peer = friend;
+    _call.isCaller = true;
+
+    document.getElementById('call-overlay-status').textContent = 'Appel en cours…';
+    setCallOverlayUser(friend);
+    showCallOverlay('outgoing');
+
+    await joinCallChannel(_call.callId);
+    await sendCallToPeer(peerId, {
+      type: 'ring',
+      callId: _call.callId,
+      from: { id: me.id, displayname: me.displayname, username: me.username, avatar_url: me.avatar_url, banner_url: me.banner_url }
+    });
+
+    _call.ringTimeout = setTimeout(() => {
+      if (_call.state === 'calling') { showToast('Pas de réponse'); endCall('timeout'); }
+    }, 45000);
+  }
+
+  function startVoiceCallFromProfile() {
+    if (!_viewingProfileUserId) return;
+    const id = _viewingProfileUserId;
+    closeModal('profile-modal');
+    startVoiceCall(id);
+  }
+
+  function handleCallSignal(payload) {
+    if (!payload || !payload.type) return;
+    switch (payload.type) {
+      case 'ring':
+        if (_call.state !== 'idle') {
+          sendCallToPeer(payload.from.id, { type: 'busy', callId: payload.callId });
+          return;
+        }
+        _call.state = 'incoming';
+        _call.callId = payload.callId;
+        _call.peerId = payload.from.id;
+        _call.peer = payload.from;
+        _call.isCaller = false;
+        document.getElementById('call-overlay-status').textContent = 'Appel entrant…';
+        setCallOverlayUser(payload.from);
+        showCallOverlay('incoming');
+        break;
+      case 'busy':
+        if (_call.callId === payload.callId && _call.state === 'calling') { showToast('Occupé'); endCall('busy'); }
+        break;
+      case 'decline':
+        if (_call.callId === payload.callId) { showToast('Appel refusé'); endCall('decline'); }
+        break;
+      case 'accept':
+        if (_call.callId === payload.callId && _call.state === 'calling') {
+          clearTimeout(_call.ringTimeout);
+          setupWebRTC(true);
+        }
+        break;
+      case 'hangup':
+        if (_call.callId === payload.callId) endCall('remote');
+        break;
+      case 'offer':
+        handleRtcOffer(payload);
+        break;
+      case 'answer':
+        handleRtcAnswer(payload);
+        break;
+      case 'ice':
+        handleRtcIce(payload);
+        break;
+    }
+  }
+
+  async function acceptIncomingCall() {
+    if (_call.state !== 'incoming') return;
+    _call.state = 'connecting';
+    await joinCallChannel(_call.callId);
+    await sendCallToPeer(_call.peerId, { type: 'accept', callId: _call.callId });
+    document.getElementById('call-overlay-status').textContent = 'Connexion…';
+    showCallOverlay('outgoing');
+  }
+
+  async function declineIncomingCall() {
+    if (_call.state !== 'incoming') return;
+    await sendCallToPeer(_call.peerId, { type: 'decline', callId: _call.callId });
+    endCall('decline');
+  }
+
+  function cancelOutgoingCall() {
+    if (_call.state === 'calling' && _call.peerId) {
+      sendCallToPeer(_call.peerId, { type: 'decline', callId: _call.callId });
+    }
+    endCall('cancel');
+  }
+
+  async function setupWebRTC(isCaller) {
+    try {
+      if (!_call.localStream) {
+        _call.localStream = await navigator.mediaDevices.getUserMedia(getVoiceAudioConstraints());
+      }
+      if (!_call.pc) {
+        _call.pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+        _call.localStream.getTracks().forEach(t => _call.pc.addTrack(t, _call.localStream));
+        _call.pc.onicecandidate = e => {
+          if (e.candidate) broadcastRtc({ type: 'ice', callId: _call.callId, candidate: e.candidate });
+        };
+        _call.pc.ontrack = e => {
+          const audio = document.getElementById('call-remote-audio');
+          if (audio) {
+            audio.srcObject = e.streams[0];
+            applyVoiceOutputDevice();
+          }
+        };
+      }
+      if (isCaller) {
+        const offer = await _call.pc.createOffer();
+        await _call.pc.setLocalDescription(offer);
+        broadcastRtc({ type: 'offer', callId: _call.callId, sdp: offer });
+      }
+    } catch (err) {
+      showToast('Micro requis pour appeler');
+      endCall('error');
+    }
+  }
+
+  async function handleRtcOffer(payload) {
+    if (payload.callId !== _call.callId) return;
+    if (!_call.pc) await setupWebRTC(false);
+    if (!_call.pc) return;
+    await _call.pc.setRemoteDescription(payload.sdp);
+    const answer = await _call.pc.createAnswer();
+    await _call.pc.setLocalDescription(answer);
+    broadcastRtc({ type: 'answer', callId: _call.callId, sdp: answer });
+    _call.state = 'connected';
+    showVoiceBar();
+  }
+
+  async function handleRtcAnswer(payload) {
+    if (!_call.pc || payload.callId !== _call.callId) return;
+    await _call.pc.setRemoteDescription(payload.sdp);
+    _call.state = 'connected';
+    showVoiceBar();
+  }
+
+  async function handleRtcIce(payload) {
+    if (!_call.pc || payload.callId !== _call.callId || !payload.candidate) return;
+    try { await _call.pc.addIceCandidate(payload.candidate); } catch (_) {}
+  }
+
+  function toggleCallMute() {
+    if (!_call.localStream) return;
+    _call.muted = !_call.muted;
+    _call.localStream.getAudioTracks().forEach(t => { t.enabled = !_call.muted; });
+    document.getElementById('voice-btn-mute')?.classList.toggle('active', _call.muted);
+  }
+
+  function toggleCallDeafen() {
+    _call.deafened = !_call.deafened;
+    const audio = document.getElementById('call-remote-audio');
+    if (audio) audio.muted = _call.deafened;
+    document.getElementById('voice-btn-deafen')?.classList.toggle('active', _call.deafened);
+  }
+
+  function endCall(reason) {
+    clearTimeout(_call.ringTimeout);
+    if (reason === 'hangup' && _call.peerId && _call.callId) {
+      sendCallToPeer(_call.peerId, { type: 'hangup', callId: _call.callId });
+    }
+    hideCallOverlay();
+    hideVoiceBar();
+    if (_call.localStream) {
+      _call.localStream.getTracks().forEach(t => t.stop());
+      _call.localStream = null;
+    }
+    if (_call.pc) { _call.pc.close(); _call.pc = null; }
+    if (_call.channel) { db.removeChannel(_call.channel); _call.channel = null; }
+    const audio = document.getElementById('call-remote-audio');
+    if (audio) { audio.srcObject = null; audio.muted = false; }
+    document.getElementById('voice-btn-mute')?.classList.remove('active');
+    document.getElementById('voice-btn-deafen')?.classList.remove('active');
+    _call.state = 'idle';
+    _call.callId = null;
+    _call.peerId = null;
+    _call.peer = null;
+    _call.muted = false;
+    _call.deafened = false;
+    _call.isCaller = false;
+    _call.startedAt = null;
+  }
+
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener('devicechange', () => {
+      if (document.getElementById('settings-panel-voice')?.classList.contains('active')) {
+        refreshVoiceDeviceLists();
+      }
+    });
+  }
 </script>
 </body>
 </html>
