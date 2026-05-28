@@ -897,7 +897,9 @@
     font-size: 13px; font-weight: 600;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     flex: 1;
+    cursor: pointer;
   }
+  .dm-user-item-name:hover { color: var(--text-primary); }
   .dm-unread-badge {
     background: var(--danger); color: #fff;
     font-size: 10px; font-weight: 700;
@@ -1130,8 +1132,11 @@
   }
   .settings-avatar-on-banner.has-img { color: transparent; }
 
-  [data-open-profile] { cursor: pointer; }
+  .profile-avatar-btn { cursor: pointer; flex-shrink: 0; position: relative; z-index: 2; }
   .friend-card { cursor: default; }
+  .friend-info.click-dm { cursor: pointer; }
+  .friend-info.click-dm:hover .friend-name { color: var(--text-primary); }
+  .dm-user-item-name { pointer-events: auto; position: relative; z-index: 1; }
   .friend-card-banner {
     height: 52px;
     background: linear-gradient(135deg, #3d4f9f 0%, #6b3d7a 50%, var(--accent2) 100%);
@@ -1154,9 +1159,7 @@
   }
   .friend-card.has-banner { flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }
   .friend-card.has-banner .friend-info { padding-top: 0; }
-  .friend-avatar[data-open-profile]:hover,
-  .dm-user-item-avatar[data-open-profile]:hover,
-  .dm-chat-header-avatar[data-open-profile]:hover { opacity: 0.85; }
+  .profile-avatar-btn:hover { opacity: 0.85; }
 
   /* ─── PROFIL UTILISATEUR (popup Discord) ─────────────── */
   .profile-modal-wrap .modal-card {
@@ -2065,25 +2068,12 @@
     }
   }
 
-  function initProfileClickDelegation() {
-    document.addEventListener('click', (e) => {
-      const el = e.target.closest('[data-open-profile]');
-      if (!el) return;
-      const userId = el.getAttribute('data-open-profile');
-      if (!userId) return;
+  function onAvatarProfileClick(e, userId) {
+    if (e) {
       e.preventDefault();
       e.stopPropagation();
-      e.stopImmediatePropagation();
-      openUserProfile(userId);
-    }, true);
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      const el = e.target.closest('[data-open-profile]');
-      if (!el) return;
-      e.preventDefault();
-      openUserProfile(el.getAttribute('data-open-profile'));
-    });
+    }
+    openUserProfile(userId);
   }
 
   function openDmFromProfile() {
@@ -2678,8 +2668,6 @@
 
   initOTPInputs('verify-otp-container');
   initOTPInputs('forgot-otp-container');
-  initProfileClickDelegation();
-
   const existingUser=getCurrentUser();
   if (existingUser) { document.getElementById('auth-overlay').style.display='none'; loadApp(existingUser); }
 
@@ -2780,11 +2768,12 @@
   function friendAvatarHtml(f) {
     const url = getAvatarUrl(f);
     const letter = f.displayname.charAt(0).toUpperCase();
-    const uid = escapeHtml(f.id);
+    const id = f.id.replace(/'/g, "\\'");
+    const click = `onclick="onAvatarProfileClick(event,'${id}')"`;
     if (url) {
-      return `<div class="friend-avatar has-img" data-open-profile="${uid}" role="button" tabindex="0" title="Voir le profil" style="background-image:url('${safeCssUrl(url)}')"></div>`;
+      return `<div class="friend-avatar profile-avatar-btn has-img" ${click} role="button" title="Voir le profil" style="background-image:url('${safeCssUrl(url)}')"></div>`;
     }
-    return `<div class="friend-avatar" data-open-profile="${uid}" role="button" tabindex="0" title="Voir le profil">${letter}</div>`;
+    return `<div class="friend-avatar profile-avatar-btn" ${click} role="button" title="Voir le profil">${letter}</div>`;
   }
 
   function friendBannerHtml(f) {
@@ -2817,27 +2806,29 @@
     }
     const label = type === 'incoming' ? '→ Demande reçue' : type === 'outgoing' ? '← Demande envoyée' : '';
     const hasBanner = !!getBannerUrl(f);
-    const uid = escapeHtml(f.id);
+    const id = f.id.replace(/'/g, "\\'");
+    const dmClick = type === 'friend' ? ` onclick="openDmWith('${id}')"` : '';
+    const infoClass = 'friend-info' + (type === 'friend' ? ' click-dm' : '');
     if (hasBanner) {
       return `<div class="friend-card has-banner">
         ${friendBannerHtml(f)}
         <div class="friend-card-inner">
           ${friendAvatarHtml(f)}
-          <div class="friend-info">
+          <div class="${infoClass}"${dmClick} title="${type === 'friend' ? 'Ouvrir la conversation' : ''}">
             <div class="friend-name">${escapeHtml(f.displayname)}${label ? ` <span style="font-size:11px;color:var(--text-muted);font-weight:400">${label}</span>` : ''}</div>
             <div class="friend-tag">@${escapeHtml(f.username)}</div>
           </div>
-          <div class="friend-actions">${actions}</div>
+          <div class="friend-actions" onclick="event.stopPropagation()">${actions}</div>
         </div>
       </div>`;
     }
     return `<div class="friend-card">
       ${friendAvatarHtml(f)}
-      <div class="friend-info">
+      <div class="${infoClass}"${dmClick} title="${type === 'friend' ? 'Ouvrir la conversation' : ''}">
         <div class="friend-name">${escapeHtml(f.displayname)}${label ? ` <span style="font-size:11px;color:var(--text-muted);font-weight:400">${label}</span>` : ''}</div>
         <div class="friend-tag">@${escapeHtml(f.username)}</div>
       </div>
-      <div class="friend-actions">${actions}</div>
+      <div class="friend-actions" onclick="event.stopPropagation()">${actions}</div>
     </div>`;
   }
 
@@ -2855,10 +2846,11 @@
       const avStyle = url ? ` style="background-image:url('${url.replace(/'/g, '%27')}')"` : '';
       const avClass = 'dm-user-item-avatar' + (url ? ' has-img' : '');
       const avContent = url ? '' : letter;
+      const id = f.id.replace(/'/g, "\\'");
       return `
-      <div class="dm-user-item${_activeDmFriendId === f.id ? ' active' : ''}" onclick="openDmWith('${f.id}')" id="dm-item-${f.id}">
-        <div class="${avClass}" data-open-profile="${escapeHtml(f.id)}" role="button" tabindex="0" title="Voir le profil"${avStyle}>${avContent}</div>
-        <span class="dm-user-item-name">${escapeHtml(f.displayname)}</span>
+      <div class="dm-user-item${_activeDmFriendId === f.id ? ' active' : ''}" id="dm-item-${f.id}">
+        <div class="${avClass} profile-avatar-btn" onclick="onAvatarProfileClick(event,'${id}')" role="button" title="Voir le profil"${avStyle}>${avContent}</div>
+        <span class="dm-user-item-name" onclick="openDmWith('${id}')">${escapeHtml(f.displayname)}</span>
       </div>`;
     }).join('');
   }
@@ -2888,9 +2880,9 @@
     const fAvClass = 'dm-chat-header-avatar' + (fUrl ? ' has-img' : '');
     document.getElementById('main-topbar').innerHTML = `
       <div class="topbar-left dm-chat-header">
-        <div class="${fAvClass}" data-open-profile="${escapeHtml(friend.id)}" role="button" tabindex="0" title="Voir le profil"${fAvStyle}>${fUrl ? '' : fLetter}</div>
-        <span class="topbar-title">${escapeHtml(friend.displayname)}</span>
-        <span style="font-size:12px;color:var(--text-muted)">@${escapeHtml(friend.username)}</span>
+        <div class="${fAvClass} profile-avatar-btn" onclick="onAvatarProfileClick(event,'${friend.id.replace(/'/g, "\\'")}')" role="button" title="Voir le profil"${fAvStyle}>${fUrl ? '' : fLetter}</div>
+        <span class="topbar-title" style="cursor:default">${escapeHtml(friend.displayname)}</span>
+        <span style="font-size:12px;color:var(--text-muted);cursor:default">@${escapeHtml(friend.username)}</span>
       </div>
       <div class="topbar-actions" style="margin-left:auto">
         <button class="topbar-icon-btn" title="Retour aux amis" onclick="backToFriends()">
