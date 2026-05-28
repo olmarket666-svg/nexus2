@@ -1552,7 +1552,7 @@
           <input type="file" id="settings-avatar-input" accept="image/png" onchange="handleAvatarFileSelect(event)">
         </label>
         <button type="button" class="btn-remove-avatar" id="settings-remove-avatar" onclick="removeAvatarPreview()" style="display:none">Supprimer la photo</button>
-        <p class="settings-avatar-hint">Fichier PNG uniquement, max. 2 Mo. Carré recommandé (256×256).</p>
+        <p class="settings-avatar-hint">Fichier PNG uniquement. Carré recommandé (256×256).</p>
       </div>
     </div>
 
@@ -1714,11 +1714,6 @@
     hideEl('settings-error');
     if (file.type !== 'image/png') {
       showError('settings-error', 'Seuls les fichiers PNG sont acceptés.');
-      e.target.value = '';
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      showError('settings-error', 'Image trop lourde (max. 2 Mo).');
       e.target.value = '';
       return;
     }
